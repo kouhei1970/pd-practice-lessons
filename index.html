@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>プロジェクトデザイン実践 自習用教材</title>
+<meta name="description" content="プロジェクトデザイン実践（2026年度 後期）の自習用教材。解説資料とライントレースのシミュレータ。">
+<style>
+:root{--bg:#f6f5f1;--paper:#fff;--ink:#1f2328;--muted:#5d6570;--line:#dedad0;--accent:#2c5d7c;--accent-ink:#1e4a66;
+--sans:"Hiragino Sans","Hiragino Kaku Gothic ProN","Noto Sans JP","Yu Gothic UI","Yu Gothic",Meiryo,sans-serif}
+@media (prefers-color-scheme: dark){:root{--bg:#16181b;--paper:#1e2125;--ink:#e6e3dc;--muted:#a8aeb5;--line:#383c42;--accent:#8db8d4;--accent-ink:#b6d3e6}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:16px;line-height:1.8;letter-spacing:.02em}
+a{color:var(--accent)}
+.wrap{max-width:780px;margin:0 auto;padding:44px 16px 56px}
+.kicker{font-size:13px;letter-spacing:.12em;color:var(--accent-ink);margin:0}
+h1{font-size:28px;line-height:1.35;margin:8px 0 8px;letter-spacing:.04em}
+.lead{color:var(--muted);margin:0 0 24px}
+h2{font-size:19px;margin:32px 0 6px}
+.sum{color:var(--muted);font-size:14.5px;margin:0 0 12px}
+.card{display:block;background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:14px 18px;margin:10px 0;color:inherit;text-decoration:none}
+.card:hover{border-color:var(--accent)}
+.card b{color:var(--accent);font-size:17px}
+.card span{display:block;font-size:14.5px;color:var(--muted);margin-top:2px}
+.note{font-size:13.5px;color:var(--muted);margin-top:36px;border-top:1px solid var(--line);padding-top:12px}
+</style>
+</head>
+<body><div class="wrap">
+<p class="kicker">2026年度 後期</p>
+<h1>プロジェクトデザイン実践　自習用教材</h1>
+<p class="lead">授業の動画と合わせて使う解説資料と、PID 制御のライントレースを試せるシミュレータです。</p>
+<h2>第8回　PID 制御でライントレース</h2>
+<p class="sum">フィードバック制御の 5 つの言葉、ON-OFF 制御、P・I・D の各動作、ゲインの決め方、サンプルプログラムの読み方。</p>
+<a class="card" href="lesson08/lesson08_notes.pdf"><b>解説資料（PDF、40 ページ）</b><span>動画と同じ順番で、説明を文章と図にまとめたもの。各区切りの見出しに動画の時刻があります。</span></a>
+<a class="card" href="lesson08/lesson08_simulator.html"><b>シミュレータ</b><span>ゲイン・コース・基準の速さなどを変えて、ロボットを走らせて確かめられます。「お試しの組」を選ぶと、解説資料の図と同じ条件で走ります。ファイルを保存すれば、ネットにつながっていなくても開けます。</span></a>
+<p class="note">資料とシミュレータの数値は、ロボットの動きを簡単な式で表した計算モデルで作った例で、実機の値ではありません。</p>
+</div></body>
+</html>

@@ -1,0 +1,1059 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>第8回 PID 制御でライントレース シミュレータ</title>
+<style>
+:root{
+  --bg:#fafaf7; --panel:#ffffff; --text:#1d1d1b; --muted:#5b5b57; --grid:#dcdcd5; --border:#c9c9c0;
+  --blue:#1f5fbf; --ochre:#a37405; --mag:#c2188a; --violet:#7b5fc7; --green:#4c9a2a;
+  --peach:#e8772e; --teal:#118c7e; --gray:#8c8c88; --red:#c4231b; --accent:#1f5fbf; --chip:#eeeee8;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#14161a; --panel:#1d2026; --text:#ecebe6; --muted:#a8a8a2; --grid:#3a3d44; --border:#4a4e57;
+    --blue:#6fa8ff; --ochre:#e0b43a; --mag:#ff6fc0; --violet:#b9a0ff; --green:#9bd96b;
+    --peach:#ffa66b; --teal:#4fd1c0; --gray:#8f8f8b; --red:#ff7b72; --accent:#6fa8ff; --chip:#2a2d34;
+  }
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--text);
+  font-family:system-ui,-apple-system,"Hiragino Sans","Yu Gothic UI","Yu Gothic","Noto Sans JP",sans-serif;
+  font-size:15px;line-height:1.55}
+.wrap{max-width:1180px;margin:0 auto;padding:12px 16px 40px}
+h1{font-size:20px;margin:8px 0 2px}
+.sub{color:var(--muted);margin:0 0 10px;font-size:13px}
+h2{font-size:15px;margin:0 0 8px}
+.tabs{display:flex;gap:6px;margin:10px 0;border-bottom:1px solid var(--border)}
+.tabs button{border:1px solid var(--border);border-bottom:none;background:var(--chip);color:var(--text);
+  padding:8px 14px;border-radius:8px 8px 0 0;font:inherit;cursor:pointer}
+.tabs button[aria-selected="true"]{background:var(--panel);font-weight:700;color:var(--accent);
+  box-shadow:0 2px 0 var(--panel)}
+.panel{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:12px}
+.layout{display:grid;grid-template-columns:340px minmax(0,1fr);gap:14px;align-items:start}
+@media (max-width:900px){.layout{grid-template-columns:minmax(0,1fr)}}
+.row{display:grid;grid-template-columns:minmax(0,5.2em) minmax(0,1fr) 5.4em;gap:8px;align-items:center;margin:5px 0}
+.row label{font-size:13px}
+.row input[type=range]{width:100%;min-width:0;accent-color:var(--accent)}
+input[type=number],select{font:inherit;color:var(--text);background:var(--bg);border:1px solid var(--border);
+  border-radius:6px;padding:3px 5px;min-width:0;width:100%}
+.row .unit{font-size:11px;color:var(--muted);grid-column:2/4;margin-top:-4px}
+fieldset{border:1px solid var(--border);border-radius:8px;margin:0 0 10px;padding:8px 10px;min-width:0}
+legend{font-size:12px;color:var(--muted);padding:0 4px}
+.radios label{margin-right:14px;white-space:nowrap}
+.btns{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0}
+button.b{font:inherit;border:1px solid var(--border);background:var(--chip);color:var(--text);border-radius:8px;
+  padding:7px 12px;cursor:pointer}
+button.b.pri{background:var(--accent);border-color:var(--accent);color:#fff}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) button.b.pri{color:#0b1020}}
+button.b:active{transform:translateY(1px)}
+.hide{display:none!important}
+canvas{display:block;width:100%}
+.cv{border:1px solid var(--border);border-radius:8px;background:var(--panel);margin-bottom:8px}
+.note{font-size:12px;color:var(--muted);margin:2px 0 8px}
+.legend{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:12.5px;margin:4px 0 8px}
+.sw{display:inline-block;width:14px;height:0;border-top:3px solid;vertical-align:middle;margin-right:5px}
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:8px}
+.card{border:1px solid var(--border);border-radius:8px;padding:8px 10px;background:var(--bg);font-size:13px}
+.card.cur{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.card h3{font-size:13px;margin:0 0 4px}
+.card dl{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.1fr);gap:3px 8px;margin:0}
+.card dt{color:var(--muted)}
+.card dd{margin:0;text-align:right;font-variant-numeric:tabular-nums}
+.lostmsg{color:var(--red);font-weight:700;margin-top:4px}
+.scroll{overflow-x:auto;max-width:100%}
+table{border-collapse:collapse;font-size:12.5px;width:100%}
+th,td{border:1px solid var(--border);padding:4px 6px;text-align:left;vertical-align:top}
+th{background:var(--chip);white-space:nowrap}
+td input[type=text]{width:100%;min-width:12em;font:inherit;color:var(--text);background:var(--bg);
+  border:1px solid var(--border);border-radius:4px;padding:2px 4px}
+td.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+details{margin:6px 0}
+summary{cursor:pointer;font-size:13px}
+.val{font-variant-numeric:tabular-nums}
+.big{font-size:17px}
+.eq{margin:4px 0}
+.barrow{display:grid;grid-template-columns:8.5em minmax(0,1fr) 4.5em;gap:8px;align-items:center;margin:6px 0;font-size:13px}
+.bar{height:16px;background:var(--chip);border:1px solid var(--border);border-radius:4px;overflow:hidden}
+.bar i{display:block;height:100%;background:var(--blue)}
+.chipL,.chipR{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:4px}
+.chipL{background:var(--violet)}.chipR{background:var(--green)}
+.gridA{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px}
+@media (max-width:900px){.gridA{grid-template-columns:minmax(0,1fr)}}
+.section{margin-top:14px}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>第8回 PID 制御でライントレース　シミュレータ</h1>
+<p class="sub">計算モデルで作った動きで、実機の値ではありません。</p>
+
+<div class="tabs" role="tablist">
+  <button id="tabbtnA" role="tab" aria-selected="true" aria-controls="paneA">A　センサと位置</button>
+  <button id="tabbtnB" role="tab" aria-selected="false" aria-controls="paneB">B　走らせる</button>
+</div>
+
+<!-- ===================== A ===================== -->
+<div id="paneA" role="tabpanel">
+  <div class="panel">
+    <div class="row" style="grid-template-columns:minmax(0,7em) minmax(0,1fr) 5.4em">
+      <label for="aSl">ずれ [mm]</label>
+      <input type="range" id="aSl" min="-45" max="45" step="0.5" value="0">
+      <input type="number" id="aNum" min="-45" max="45" step="0.5" value="0">
+    </div>
+    <div class="note">ずれ = 線の中心線から、センサ列の中心までの横ずれ。＋は左（図の上）、−は右（図の下）。</div>
+    <div class="gridA">
+      <div>
+        <h2>上面図（ロボットは右へ進む。上がロボットの左）</h2>
+        <canvas id="aTop" class="cv" style="height:270px" aria-label="上面図"></canvas>
+        <div class="note">黒い帯 = 線（幅 19 mm、仮定）、白い破線 = 中心線。センサの間隔は 32 mm（仮定）。車体は模式図。</div>
+        <div class="barrow"><span><span class="chipL"></span>左のセンサ（上）</span><div class="bar"><i id="barL"></i></div><span class="val" id="valL"></span></div>
+        <div class="barrow"><span><span class="chipR"></span>右のセンサ（下）</span><div class="bar"><i id="barR"></i></div><span class="val" id="valR"></span></div>
+        <div class="eq big">位置 ＝ 右 − 左 ＝ <b class="val" id="vPos"></b> %</div>
+        <div class="eq big">偏差 e ＝ 0 − 位置 ＝ <b class="val" id="vE"></b> %</div>
+        <div class="note" id="aMsg"></div>
+      </div>
+      <div>
+        <h2>ずれと位置の関係</h2>
+        <canvas id="aGraph" class="cv" style="height:300px" aria-label="ずれと位置のグラフ"></canvas>
+        <div class="note">青い曲線がずれと位置の関係。丸が今のずれ。ずれが大きくなりすぎると、両方のセンサが白の上に乗り、位置が 0 に近づく（線の中央にいるように見えてしまう）。</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== B ===================== -->
+<div id="paneB" role="tabpanel" class="hide">
+  <div class="layout">
+    <div class="panel" id="settings">
+      <h2>設定</h2>
+      <fieldset>
+        <legend>お試しの組</legend>
+        <select id="preset"></select>
+        <div class="note" style="margin-bottom:0">選ぶと設定を入れ、比べる結果を計算して重ねます（最後の 1 つが色つき、ほかは灰色）。</div>
+      </fieldset>
+      <fieldset>
+        <legend>制御の方式</legend>
+        <div class="radios">
+          <label><input type="radio" name="mode" value="pid" checked> PID</label>
+          <label><input type="radio" name="mode" value="onoff"> ON-OFF</label>
+        </div>
+        <div id="gPid"></div>
+        <div id="gOnoff" class="hide"></div>
+      </fieldset>
+      <fieldset>
+        <legend>コースと条件</legend>
+        <div class="row" style="grid-template-columns:minmax(0,5.2em) minmax(0,1fr)">
+          <label for="course">コース</label>
+          <select id="course"><option value="straight">直線</option><option value="curve">カーブ（左へ曲がる）</option></select>
+        </div>
+        <div id="gCurve" class="hide"></div>
+        <div id="gCond"></div>
+        <div class="row" style="grid-template-columns:minmax(0,5.2em) minmax(0,1fr)">
+          <label for="ctrl_dt">制御周期 Δt</label>
+          <select id="ctrl_dt"><option value="10">10 ms</option><option value="20">20 ms</option><option value="50">50 ms</option><option value="100">100 ms</option></select>
+        </div>
+        <div class="row" style="grid-template-columns:minmax(0,5.2em) minmax(0,1fr)">
+          <label for="band">収まったとみなす幅</label>
+          <select id="band"><option value="1">±1 mm（既定）</option><option value="0.3">±0.3 mm</option></select>
+        </div>
+        <div class="row" style="grid-template-columns:minmax(0,5.2em) minmax(0,1fr)">
+          <label for="imax">積分の上限</label>
+          <select id="imax"><option value="auto">あり（mv の上限を超えないよう切る）</option><option value="none">なし</option></select>
+        </div>
+      </fieldset>
+      <div class="btns">
+        <button class="b pri" id="btnRun">走らせる</button>
+        <button class="b" id="btnNow">すぐ結果を見る</button>
+        <button class="b" id="btnClear">消す</button>
+      </div>
+      <div class="row" style="grid-template-columns:minmax(0,7em) minmax(0,1fr)">
+        <label for="speed">再生の速さ</label>
+        <select id="speed"><option value="0.25">0.25×</option><option value="0.5">0.5×</option><option value="1">1×</option><option value="2" selected>2×</option><option value="4">4×</option></select>
+      </div>
+      <label><input type="checkbox" id="keep"> 前の結果を残す（灰色で重ねる）</label>
+    </div>
+
+    <div id="figs">
+      <div class="panel">
+        <h2>上面図（コースを線に沿って展開。横方向を拡大）</h2>
+        <canvas id="top" class="cv" style="height:340px" aria-label="走行の上面図"></canvas>
+        <div class="note">黒い帯 = 線（幅 19 mm、仮定）、白い破線 = 中心線。上がロボットの左。センサの色は反射値（暗いほど黒に近い）、車輪は紫 = 左・緑 = 右。ロボットの向きは誇張、車体は模式図。</div>
+        <div class="legend" id="legend"></div>
+      </div>
+      <div class="panel section">
+        <h2>時間波形</h2>
+        <canvas id="wDev" class="cv" style="height:150px" aria-label="ずれの波形"></canvas>
+        <canvas id="wE" class="cv" style="height:150px" aria-label="偏差 e の波形"></canvas>
+        <canvas id="wMv" class="cv" style="height:170px" aria-label="操作量 mv の波形"></canvas>
+        <label><input type="checkbox" id="brk"> 内訳を表示（P の項・I の項・D の項）</label>
+        <div class="legend" id="brkLegend"></div>
+        <details id="detSpeed"><summary>詳しく（左右の車輪の速さ）</summary>
+          <canvas id="wV" class="cv" style="height:150px;margin-top:6px" aria-label="左右の車輪の速さ"></canvas>
+          <div class="legend"><span><span class="sw" style="border-color:var(--violet)"></span>左の車輪</span><span><span class="sw" style="border-color:var(--green)"></span>右の車輪</span><span><span class="sw" style="border-color:var(--gray)"></span>前の結果</span></div>
+        </details>
+        <div class="note">破線は mv の上限（±100）、細い線は 0。縦線は再生中の時刻。</div>
+      </div>
+      <div class="panel section">
+        <h2>結果の数値</h2>
+        <div id="cards" class="cards"></div>
+        <div class="btns"><button class="b" id="btnRec">記録に足す</button></div>
+      </div>
+      <div class="panel section">
+        <h2>記録の表</h2>
+        <div class="note">「記録に足す」で今の結果（色つき）が 1 行足されます。メモ欄に、行き過ぎ・振動・カーブでのずれなどを言葉で書いてください。ページを閉じると消えます。</div>
+        <div class="scroll"><table id="recTable"><thead></thead><tbody></tbody></table></div>
+        <div class="btns"><button class="b" id="btnCopy">表をコピー</button><span class="note" id="copyMsg"></span></div>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+
+<script id="ltsim2">
+/* ltsim2.js -- JavaScript port of the 2-colour-sensor line-trace model (no external libraries).
+ * 2 個のカラーセンサのライントレース数値モデルの JavaScript 移植（外部ライブラリなし）。
+ *
+ * Source / 出典: common/ltsim2.py (Params2, refl_band, position_of, PID2, OnOff2, simulate2, settle_s,
+ *   is_lost2, position_curve, lost_limit, metrics, find_ku2, zn_table2) and common/ltsim.py (Params,
+ *   reflectance, Straight, Curve, _theta_of_s, course_xy, overshoot_mm, steady_mm, oscillation).
+ *   Not ported / 移植しない: linear_ku, check_signs, STANDARD, zn_table (ltsim.py).
+ *
+ * NOT real-machine values. These are computed values of a model (sensor spacing, height, line width,
+ * speed unit are unconfirmed).  Noise uses a seeded PRNG (mulberry32 + Box-Muller), so it does NOT
+ * match numpy; the noise-free results match Python sample by sample (see test/check_port.cjs).
+ * 実機の値ではない。計算モデルの値（センサ間隔・高さ・線幅・速さの単位は未確認）。
+ * 雑音は種つき擬似乱数（mulberry32 + Box-Muller）で numpy とは一致しない。雑音なしは Python と
+ * 1 サンプルずつ一致する（test/check_port.cjs で確認）。
+ *
+ * Signs / 符号: y_s left = +, position = r_right - r_left, e = midpoint - position, mv > 0 turns right,
+ *   v_L = base + mv, v_R = base - mv.
+ * The order of every floating-point operation follows the Python code; do not "simplify" formulas.
+ * 浮動小数点の演算順序は Python と同じ。式を同値な別の書き方に変えないこと。
+ */
+var LTSIM2 = (function () {
+  'use strict';
+
+  // ---- helpers / 補助 ----
+  function pyround(x) {            // Python round(): half to even / 偶数丸め
+    var f = Math.floor(x), d = x - f;
+    if (d < 0.5) return f;
+    if (d > 0.5) return f + 1;
+    return (f % 2 === 0) ? f : f + 1;
+  }
+  function clip(x, lo, hi) { return Math.min(Math.max(x, lo), hi); }   // np.clip
+  function sign(x) { return x > 0 ? 1 : (x < 0 ? -1 : 0); }
+  function linspace(a, b, n) {     // numpy.linspace: i*step + start, last = stop
+    var out = new Array(n), step = (b - a) / (n - 1), i;
+    for (i = 0; i < n; i++) out[i] = i * step + a;
+    out[n - 1] = b;
+    return out;
+  }
+  function mean(a) { var s = 0, i; for (i = 0; i < a.length; i++) s += a[i]; return s / a.length; }
+  function stdev(a) { var m = mean(a), s = 0, i; for (i = 0; i < a.length; i++) s += (a[i] - m) * (a[i] - m); return Math.sqrt(s / a.length); }
+  function ptp(a) { var lo = Infinity, hi = -Infinity, i; for (i = 0; i < a.length; i++) { if (a[i] < lo) lo = a[i]; if (a[i] > hi) hi = a[i]; } return hi - lo; }
+  function assign(dst, src) { var k; if (src) for (k in src) if (Object.prototype.hasOwnProperty.call(src, k)) dst[k] = src[k]; return dst; }
+
+  // ---- seeded normal noise / 種つき正規雑音 ----
+  function mulberry32(a) {
+    a = a >>> 0;
+    return function () {
+      a = (a + 0x6D2B79F5) >>> 0;
+      var t = a;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+  function makeNormal(seed) {
+    var u = mulberry32(seed);
+    return function () {
+      var u1 = 1 - u(), u2 = u();     // u1 in (0,1]
+      return Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
+    };
+  }
+
+  // ---- parameters / パラメータ (ltsim.Params, ltsim2.Params2) ----
+  function Params(o) {
+    var p = {
+      D: 0.056, T: 0.112, v0: 300.0, ell: 0.03, tau: 0.08, L: 0.02, dt: 0.01, w: 0.019,
+      sigma: 0.008, r_w: 100.0, r_b: 10.0, r_th: 55.0, u_max: 300.0
+    };
+    return assign(p, o);
+  }
+  function kwOf(p) { return Math.PI * p.D / 360.0; }
+  function Params2(o) {
+    var q = { d: 0.032, base: 100.0, mv_max: 100.0, i_max: 'auto', midpoint: 0.0, kick: true };
+    return assign(q, o);
+  }
+
+  // ---- reflectance / 反射値 ----
+  function reflectance1(y, p) {
+    var Lg = function (z) { return 1.0 / (1.0 + Math.exp(-1.702 * z)); };
+    return p.r_b + (p.r_w - p.r_b) * (Lg(y / p.sigma) + Lg((-p.w - y) / p.sigma));
+  }
+  function refl_band(yc, p) { p = p || Params(); return reflectance1(yc - p.w / 2, p); }
+  function position_of(y_s, p, q) {
+    p = p || Params(); q = q || Params2();
+    return refl_band(y_s - q.d / 2, p) - refl_band(y_s + q.d / 2, p);
+  }
+
+  // ---- courses / コース ----
+  function Straight() { return { type: 'Straight', kappa: function (s) { return 0.0; } }; }
+  function Curve(x1, R) {
+    x1 = (x1 === undefined) ? 0.3 : x1; R = (R === undefined) ? 0.3 : R;
+    return { type: 'Curve', x1: x1, R: R, kappa: function (s) { return s >= x1 ? 1.0 / R : 0.0; } };
+  }
+  function theta_of_s(course, s) {
+    if (course.type === 'Curve') return s >= course.x1 ? (s - course.x1) / course.R : 0.0;
+    return 0.0;
+  }
+  function course_xy(course, s, offset) {
+    var th = theta_of_s(course, s), X0, Y0;
+    if (course.type === 'Curve') {
+      if (s >= course.x1) { X0 = course.x1 + course.R * Math.sin(th); Y0 = course.R * (1 - Math.cos(th)); }
+      else { X0 = s; Y0 = 0.0; }
+    } else { X0 = s; Y0 = 0.0; }
+    return [X0 - offset * Math.sin(th), Y0 + offset * Math.cos(th)];
+  }
+
+  // ---- controllers / 制御器 ----
+  function PID2(kp, ki, kd) {
+    var c = { type: 'PID2', kp: kp, ki: ki || 0.0, kd: kd || 0.0 };
+    c.reset = function (q) { c.I = 0.0; c.last = q.kick ? 0.0 : null; c.q = q; c.terms = [0.0, 0.0, 0.0]; };
+    c.step = function (error, dt) {
+      var q = c.q, le = (c.last === null) ? error : c.last;
+      c.I += (error + le) / 2.0 * dt;
+      if (q.i_max === 'auto') {
+        if (c.ki !== 0.0) {
+          if (c.ki * c.I > q.mv_max) c.I = q.mv_max / c.ki;
+          if (c.ki * c.I < -q.mv_max) c.I = -q.mv_max / c.ki;
+        }
+      } else if (q.i_max !== null && q.i_max !== undefined) {
+        c.I = clip(c.I, -q.i_max, q.i_max);
+      }
+      var der = (error - le) / dt;
+      c.last = error;
+      c.terms = [c.kp * error, c.ki * c.I, c.kd * der];
+      var mv = 0 + c.terms[0] + c.terms[1] + c.terms[2];
+      return [clip(mv, -q.mv_max, q.mv_max), mv, c.I];
+    };
+    return c;
+  }
+  function OnOff2(U) {
+    var c = { type: 'OnOff2', U: (U === undefined) ? 100.0 : U };
+    c.reset = function (q) { c.q = q; c.terms = [0.0, 0.0, 0.0]; };
+    c.step = function (error, dt) {
+      var mv = error > 0 ? c.U : -c.U;
+      c.terms = [mv, 0.0, 0.0];
+      return [clip(mv, -c.q.mv_max, c.q.mv_max), mv, 0.0];
+    };
+    return c;
+  }
+
+  // ---- position characteristic / position の特性 ----
+  function position_curve(p, q, ymax, n) {
+    ymax = (ymax === undefined) ? 0.040 : ymax; n = (n === undefined) ? 801 : n;
+    var y = linspace(-ymax, ymax, n), pos = new Array(n), i;
+    for (i = 0; i < n; i++) pos[i] = position_of(y[i], p, q);
+    return [y, pos];
+  }
+  function lost_limit(p, q, tol) {
+    tol = (tol === undefined) ? 5.0 : tol;
+    var c = position_curve(p, q, 0.12, 2401), y = [], pos = [], i, im = 0, k;
+    for (i = 0; i < c[0].length; i++) if (c[0][i] >= 0) { y.push(c[0][i]); pos.push(Math.abs(c[1][i])); }
+    for (i = 1; i < pos.length; i++) if (pos[i] > pos[im]) im = i;
+    for (k = im; k < pos.length; k++) if (pos[k] < tol) return y[k];
+    return y[y.length - 1];
+  }
+  function metrics(p, q, tol) {
+    tol = (tol === undefined) ? 5.0 : tol;
+    var c = position_curve(p, q, 0.06, 1201), y = c[0], pos = c[1], n = y.length, mm = [], i, k;
+    for (i = 0; i < n; i++) mm.push(y[i] * 1e3);
+    var dy = 1e-5;
+    var slope = -(position_of(dy, p, q) - position_of(-dy, p, q)) / (2 * dy) / 1e3;
+    var i0 = Math.floor(n / 2), prop = 0.0;
+    if (Math.abs(slope) > 0.05) {
+      for (k = i0; k < n; k++) {
+        var lin = -slope * mm[k];
+        if (Math.abs(pos[k] - lin) <= 0.10 * Math.abs(lin) + 1e-9) prop = mm[k]; else break;
+      }
+    }
+    var pk = i0;
+    for (i = i0 + 1; i < n; i++) if (Math.abs(pos[i]) > Math.abs(pos[pk])) pk = i;
+    return { slope: slope, prop: prop, peak_mm: mm[pk], peak_val: Math.abs(pos[pk]), lost_mm: lost_limit(p, q, tol) * 1e3 };
+  }
+
+  // ---- simulation / シミュレーション ----
+  var KEYS = ('t s y y_s psi r r_clean e u u_p u_i u_d v_L v_R integral omega X Y heading Xs Ys ' +
+    'rl rr rl_clean rr_clean p_term i_term d_term').split(' ');
+
+  function simulate2(ctrl, T, o) {
+    o = o || {};
+    var y0 = (o.y0 === undefined) ? 0.010 : o.y0, psi0 = o.psi0 || 0.0;
+    var p = assign({}, o.p || Params()), q = o.q || Params2();
+    var geometry = (o.geometry === undefined) ? true : o.geometry;
+    var noise_std = o.noise_std || 0.0, seed = o.seed || 0;
+    var course = o.course || Straight();
+    p.v0 = q.base;
+    var kw = kwOf(p), v = p.v0 * kw;
+    ctrl.reset(q);
+    var randn = makeNormal(seed);
+    var N = pyround(T / p.dt), nd = pyround(p.L / p.dt), h = p.dt;
+    var nc = (o.ctrl_dt === undefined || o.ctrl_dt === null) ? 1 : Math.max(1, pyround(o.ctrl_dt / h));
+    var A = {}, i, kk;
+    for (i = 0; i < KEYS.length; i++) A[KEYS[i]] = new Float64Array(N + 1);
+    var ylim = lost_limit(p, q);
+    var lost = new Array(N + 1);
+    var ubuf = []; for (i = 0; i < nd; i++) ubuf.push(0.0);
+    var y = y0, psi = psi0, om = 0.0, s = 0.0;
+    var mv = 0.0, mv_raw = 0.0, integ = 0.0, err = 0.0, pos = 0.0, rl = 0.0, rr = 0.0;
+    for (var k = 0; k <= N; k++) {
+      var ys = y + p.ell * Math.sin(psi);
+      var rlc = refl_band(ys + q.d / 2, p), rrc = refl_band(ys - q.d / 2, p);
+      if (k % nc === 0) {                                // controller update / 制御器の更新
+        if (noise_std > 0) { rl = rlc + noise_std * randn(); rr = rrc + noise_std * randn(); }
+        else { rl = rlc; rr = rrc; }
+        pos = rr - rl;
+        err = q.midpoint - pos;
+        var st = ctrl.step(err, h * nc);
+        mv = st[0]; mv_raw = st[1]; integ = st[2];
+      }
+      ubuf.push(mv);
+      var mv_app = nd > 0 ? ubuf.shift() : mv;
+      var om_cmd = 2 * kw * (-mv_app) / p.T;
+      var th, Xr, Yr;
+      if (geometry) { th = theta_of_s(course, s); var xy = course_xy(course, s, y); Xr = xy[0]; Yr = xy[1]; }
+      else { th = 0.0; Xr = 0.0; Yr = 0.0; }
+      A.t[k] = k * h; A.s[k] = s; A.y[k] = y; A.y_s[k] = ys; A.psi[k] = psi; A.r[k] = pos;
+      A.r_clean[k] = rrc - rlc; A.e[k] = err; A.u[k] = mv; A.u_p[k] = mv_raw;
+      A.u_i[k] = ctrl.terms[1]; A.u_d[k] = ctrl.terms[2];
+      A.v_L[k] = q.base + mv_app; A.v_R[k] = q.base - mv_app; A.integral[k] = integ; A.omega[k] = om;
+      A.X[k] = Xr; A.Y[k] = Yr; A.heading[k] = th + psi;
+      A.Xs[k] = Xr + p.ell * Math.cos(th + psi); A.Ys[k] = Yr + p.ell * Math.sin(th + psi);
+      A.rl[k] = rl; A.rr[k] = rr; A.rl_clean[k] = rlc; A.rr_clean[k] = rrc;
+      A.p_term[k] = ctrl.terms[0]; A.i_term[k] = ctrl.terms[1]; A.d_term[k] = ctrl.terms[2];
+      lost[k] = Math.abs(ys) > ylim;
+      var kap = course.kappa(s);
+      var y_n = y + h * v * Math.sin(psi), psi_n = psi + h * (om - v * kap), om_n = om + h * (om_cmd - om) / p.tau;
+      s += h * v * Math.cos(psi) / Math.max(1.0 - kap * y, 0.2);
+      y = y_n; psi = psi_n; om = om_n;
+    }
+    A.lost = lost; A.course = course; A.params = p;
+    return A;
+  }
+
+  // ---- indicators / 指標 ----
+  function overshoot_mm(res, y0, signal) {
+    var x = res[signal || 'y_s'];
+    y0 = (y0 === undefined || y0 === null) ? res.y[0] : y0;
+    var sg = y0 >= 0 ? 1.0 : -1.0, m = -Infinity, i;
+    for (i = 0; i < x.length; i++) if (-sg * x[i] > m) m = -sg * x[i];
+    return Math.max(0.0, m * 1e3);
+  }
+  function steady_mm(res, last) {
+    last = (last === undefined) ? 1.0 : last;
+    var lim = res.t[res.t.length - 1] - last, a = [], i;
+    for (i = 0; i < res.t.length; i++) if (res.t[i] >= lim) a.push(res.y[i]);
+    return mean(a) * 1e3;
+  }
+  function oscillation(res, last, signal) {
+    last = (last === undefined) ? 2.0 : last;
+    var lim = res.t[res.t.length - 1] - last, x = [], t = [], i, xs = res[signal || 'y_s'];
+    for (i = 0; i < res.t.length; i++) if (res.t[i] >= lim) { x.push(xs[i] * 1e3); t.push(res.t[i]); }
+    var width = ptp(x), m = mean(x), c = [], idx = [];
+    for (i = 0; i < x.length; i++) c.push(x[i] - m);
+    for (i = 0; i < x.length - 1; i++) if (c[i] < 0 && c[i + 1] >= 0) idx.push(i);
+    var period = NaN;
+    if (idx.length >= 2 && width > 1e-3) {
+      var tc = [], d = 0;
+      for (i = 0; i < idx.length; i++) tc.push(t[idx[i]] + (-c[idx[i]]) / (c[idx[i] + 1] - c[idx[i]]) * (t[1] - t[0]));
+      for (i = 1; i < tc.length; i++) d += tc[i] - tc[i - 1];
+      period = d / (tc.length - 1);
+    }
+    return [width, period];
+  }
+  function settle_s(res, band_mm, signal) {
+    band_mm = (band_mm === undefined) ? 1.0 : band_mm;
+    var x = res[signal || 'y_s'], last = -1, i;
+    for (i = 0; i < x.length; i++) if (Math.abs(x[i]) * 1e3 > band_mm) last = i;
+    if (last < 0) return 0.0;
+    return last >= x.length - 1 ? NaN : res.t[last + 1];
+  }
+  function is_lost2(res) { var i; for (i = 0; i < res.lost.length; i++) if (res.lost[i]) return true; return false; }
+
+  // ---- ultimate gain / 限界ゲイン ----
+  function find_ku2(p, q, kp_max, T, y0, grow) {
+    p = p || Params(); q = assign({}, q || Params2()); q.mv_max = 1e9;
+    kp_max = (kp_max === undefined) ? 400.0 : kp_max; T = (T === undefined) ? 12.0 : T;
+    y0 = (y0 === undefined) ? 0.002 : y0; grow = (grow === undefined) ? 0.98 : grow;
+    function sustained(kp) {
+      var r = simulate2(PID2(kp), T, { y0: y0, p: p, q: q, geometry: false });
+      var a2 = [], a1 = [], seg = [], i;
+      for (i = 0; i < r.t.length; i++) {
+        if (r.t[i] >= T - 2.0) a2.push(r.y[i]);
+        if (r.t[i] >= T - 4.0 && r.t[i] < T - 2.0) a1.push(r.y[i]);
+        if (r.t[i] >= T - 4.0) seg.push(r.y[i]);
+      }
+      var w2 = ptp(a2), w1 = ptp(a1), cross = 0;
+      for (i = 1; i < seg.length; i++) if (sign(seg[i]) - sign(seg[i - 1]) !== 0) cross++;
+      return w2 > 1e-5 && w2 >= grow * w1 && cross >= 3;
+    }
+    var lo = 0.5, hi = lo, it;
+    while (hi <= kp_max && !sustained(hi)) { lo = hi; hi = hi * 1.05; }
+    if (hi > kp_max) return [NaN, NaN];
+    for (it = 0; it < 14; it++) {
+      var mid = 0.5 * (lo + hi);
+      if (sustained(mid)) hi = mid; else lo = mid;
+    }
+    var ku = hi;
+    var r2 = simulate2(PID2(ku), 20.0, { y0: y0, p: p, q: q, geometry: false });
+    return [ku, oscillation(r2, 8.0, 'y_s')[1]];
+  }
+  function zn_table2(ku, tu) {
+    var rows = { P: [0.5, null, null], PI: [0.45, 1 / 1.2, null], PID: [0.6, 0.5, 0.125] }, out = {}, n;
+    for (n in rows) {
+      var a = rows[n][0], b = rows[n][1], c = rows[n][2];
+      var kp = a * ku, ti = b === null ? null : b * tu, td = c === null ? null : c * tu;
+      out[n] = { kp: kp, ti: ti, td: td, ki: ti === null ? 0.0 : kp / ti, kd: td === null ? 0.0 : kp * td };
+    }
+    return out;
+  }
+
+  return {
+    KEYS: KEYS, Params: Params, Params2: Params2, Straight: Straight, Curve: Curve, PID2: PID2, OnOff2: OnOff2,
+    reflectance: reflectance1, refl_band: refl_band, position_of: position_of, position_curve: position_curve,
+    lost_limit: lost_limit, metrics: metrics, simulate2: simulate2, course_xy: course_xy,
+    overshoot_mm: overshoot_mm, steady_mm: steady_mm, oscillation: oscillation, settle_s: settle_s,
+    is_lost2: is_lost2, find_ku2: find_ku2, zn_table2: zn_table2, mean: mean, stdev: stdev
+  };
+})();
+if (typeof module !== 'undefined') module.exports = LTSIM2; else window.LTSIM2 = LTSIM2;
+
+</script>
+
+<script id="presets" type="application/json">
+[
+ {"name":"① ON-OFF と PID","common":{"course":"straight","y0":10,"T":5},
+  "runs":[{"mode":"onoff","U":100},{"mode":"pid","kp":1,"ki":0.1,"kd":0.1}]},
+ {"name":"② ON-OFF の大きさ","common":{"mode":"onoff","course":"straight","y0":10,"T":8},
+  "runs":[{"U":50},{"U":100}]},
+ {"name":"③ K_P を変える","common":{"course":"straight","y0":10,"T":12,"ki":0,"kd":0},
+  "runs":[{"kp":0.3},{"kp":1},{"kp":3}]},
+ {"name":"④ カーブと P 制御","common":{"course":"curve","R":0.3,"y0":0,"T":15,"ki":0,"kd":0},
+  "runs":[{"kp":1},{"kp":3}]},
+ {"name":"⑤ 限界のゲイン","common":{"course":"straight","y0":2,"T":5,"ki":0,"kd":0},
+  "runs":[{"kp":16},{"kp":19.5},{"kp":30}]},
+ {"name":"⑥ I 動作を足す","common":{"course":"curve","R":0.3,"y0":0,"T":15,"kp":1,"kd":0,"band":0.3},
+  "runs":[{"ki":0},{"ki":0.5}]},
+ {"name":"⑦ K_I を変える","common":{"course":"curve","R":0.3,"y0":0,"T":40,"kp":1,"kd":0,"band":0.3},
+  "runs":[{"ki":0.1},{"ki":0.5},{"ki":5}]},
+ {"name":"⑧ D 動作を足す","common":{"course":"straight","y0":10,"T":5,"kp":1,"ki":0},
+  "runs":[{"kd":0},{"kd":0.1},{"kd":0.3},{"kd":1}]},
+ {"name":"⑨ 雑音と微分","common":{"course":"straight","y0":0,"T":5,"noise":2,"kp":1,"ki":0},
+  "runs":[{"kd":0},{"kd":0.3}]},
+ {"name":"⑩ サンプルの初期値","common":{"course":"straight","y0":10,"T":8,"kp":1,"ki":0.1,"kd":0.1},
+  "runs":[{}]},
+ {"name":"⑪ 限界感度法のゲイン","common":{"course":"straight","y0":2,"T":3,"kp":11.7,"ki":67.4,"kd":0.508},
+  "runs":[{}]},
+ {"name":"⑫ 制御周期","common":{"course":"straight","y0":2,"T":10,"kp":11.7,"ki":67.4,"kd":0.508},
+  "runs":[{"ctrl_dt":10},{"ctrl_dt":100}]},
+ {"name":"⑬ 積分の上限","common":{"course":"straight","y0":10,"T":10,"kp":11.7,"ki":67.4,"kd":0.508},
+  "runs":[{"imax":"none"},{"imax":"auto"}]},
+ {"name":"⑭ 基準の速さ","common":{"course":"straight","y0":10,"T":10,"kp":1,"ki":0.1,"kd":0.1},
+  "runs":[{"base":100},{"base":200},{"base":300}]}
+]
+</script>
+
+<script id="core">
+/* 計算の核（画面に依存しない。test/check_presets.cjs も同じものを使う）*/
+var CORE = (function (L) {
+  'use strict';
+  var DEF = { mode: 'pid', kp: 1, ki: 0.1, kd: 0.1, U: 100, course: 'straight', R: 0.3, y0: 10, base: 100,
+              noise: 0, ctrl_dt: 10, imax: 'auto', band: 1, T: 8 };
+  function merge() { var o = {}, i, k; for (i = 0; i < arguments.length; i++) for (k in arguments[i]) o[k] = arguments[i][k]; return o; }
+  function expand(preset) { return preset.runs.map(function (r) { return merge(DEF, preset.common, r); }); }
+  var MINUS = '\u2212';
+  function nf(v, d) { var t = v.toFixed(d); if (/^-0(\.0*)?$/.test(t)) t = t.slice(1); return t.replace('-', MINUS); }
+  // 振動の判定: 最後の W = max(1, T/3) 秒（後ろの窓）と、その直前の同じ長さの窓（前の窓）の山谷幅を比べる。
+  // 後ろの窓の幅が 0.3 mm 以上で、前の窓の 0.67 倍以上なら「続く」。幅と周期は後ろの窓で測る。
+  function metrics(res, c) {
+    var T = c.T, W = Math.max(1, T / 3), band = c.band || 1;
+    var a = L.oscillation(res, W, 'y_s'), n = 0, i, sat = 0, md = 0;
+    while (n < res.t.length && res.t[n] <= T - W + 1e-9) n++;
+    var b = L.oscillation({ t: res.t.slice(0, n), y_s: res.y_s.slice(0, n) }, W, 'y_s');
+    // 後ろの窓の中で、ずれの「窓の平均からの差」の符号が変わる時刻を数える（3 回以上 = 1.5 周期以上で振動とみなす）
+    var lim = res.t[res.t.length - 1] - W, xs = [], ts = [], mu = 0, cross = [];
+    for (i = 0; i < res.t.length; i++) if (res.t[i] >= lim) { xs.push(res.y_s[i] * 1e3); ts.push(res.t[i]); mu += res.y_s[i] * 1e3; }
+    mu /= xs.length;
+    for (i = 0; i < xs.length - 1; i++) {
+      var d0 = xs[i] - mu, d1 = xs[i + 1] - mu;
+      if ((d0 < 0 && d1 >= 0) || (d0 > 0 && d1 <= 0)) cross.push(ts[i] + Math.abs(d0) / (Math.abs(d0) + Math.abs(d1)) * (ts[i + 1] - ts[i]));
+    }
+    var period = a[1];
+    if (!isFinite(period) && cross.length >= 2) period = (cross[cross.length - 1] - cross[0]) / (cross.length - 1) * 2;   // 符号の変わる間隔の平均 × 2
+    var sustained = a[0] >= 0.3 && a[0] >= 0.67 * b[0] && cross.length >= 3;
+    for (i = 0; i < res.u.length; i++) if (Math.abs(res.u[i]) >= 100 - 1e-9) sat++;
+    for (i = 0; i < res.y_s.length; i++) if (Math.abs(res.y_s[i]) > md) md = Math.abs(res.y_s[i]);
+    var st = L.settle_s(res, band); if (st > T - 0.1) st = NaN;   // 終了の直前に初めて収まる＝収まらない扱い
+    return { overshoot: L.overshoot_mm(res, undefined, 'y_s'), maxdev: md * 1e3, settle: st, steady: L.steady_mm(res, 1.0),
+             osc: { sustained: sustained, width: a[0], period: period, prevWidth: b[0], win: W, crossings: cross.length },
+             sat: sat / res.u.length, lost: L.is_lost2(res), band: band };
+  }
+  function zeroStart(c) { return c.y0 === 0; }
+  function devLabel(c) { return zeroStart(c) ? '最大のずれ' : '行き過ぎ量'; }
+  function devValue(m, c) { return zeroStart(c) ? m.maxdev : m.overshoot; }
+  function fmtSettle(m) { if (m.osc.sustained) return '収まらない（振動が続く）'; if (isNaN(m.settle)) return '収まらない'; if (m.settle === 0) return '最初から収まっている'; return nf(m.settle, 2) + ' s'; }
+  function fmtSteady(m) { return m.osc.sustained ? '\u2014（振動中）' : nf(m.steady, 2) + ' mm'; }
+  function fmtOsc(m) { return m.osc.sustained ? '続く（幅 ' + nf(m.osc.width, 2) + ' mm、周期 ' + (isFinite(m.osc.period) ? nf(m.osc.period, 2) + ' s' : '\u2014') + '）' : 'なし'; }
+  function run(c) {
+    var ctrl = c.mode === 'onoff' ? L.OnOff2(c.U) : L.PID2(c.kp, c.ki, c.kd);
+    var q = L.Params2({ base: c.base, i_max: c.imax === 'none' ? null : 'auto' });
+    var course = c.course === 'curve' ? L.Curve(0.1, c.R) : L.Straight();
+    var res = L.simulate2(ctrl, c.T, { y0: c.y0 / 1000, course: course, q: q, noise_std: c.noise, seed: 0, ctrl_dt: c.ctrl_dt / 1000 });
+    return { cond: c, res: res, m: metrics(res, c) };
+  }
+  function g(v) { return String(+(+v).toPrecision(6)).replace('-', MINUS); }   // minus sign, not a hyphen / 負号はマイナス記号で
+  function labelText(c) {
+    var s;
+    if (c.mode === 'onoff') s = 'ON-OFF U=' + g(c.U);
+    else {
+      var kind = (c.ki === 0 && c.kd === 0) ? 'P だけ' : (c.kd === 0 ? 'PI' : (c.ki === 0 ? 'PD' : 'PID'));
+      s = kind + ' K_P=' + g(c.kp);
+      if (c.ki !== 0) s += ' K_I=' + g(c.ki);
+      if (c.kd !== 0) s += ' K_D=' + g(c.kd);
+    }
+    s += '・' + (c.course === 'curve' ? 'カーブ R=' + g(c.R) + ' m' : '直線');
+    s += '・最初のずれ ' + g(c.y0) + ' mm・基準 ' + g(c.base) + ' 度/秒';
+    if (c.noise > 0) s += '・雑音 ' + g(c.noise) + ' %';
+    if (c.ctrl_dt !== 10) s += '・Δt=' + g(c.ctrl_dt) + ' ms';
+    if (c.imax === 'none') s += '・積分の上限なし';
+    return s;
+  }
+  return { DEF: DEF, merge: merge, expand: expand, run: run, metrics: metrics, labelText: labelText, g: g, nf: nf, devLabel: devLabel, devValue: devValue, fmtSettle: fmtSettle, fmtSteady: fmtSteady, fmtOsc: fmtOsc };
+})(LTSIM2);
+</script>
+
+<script id="ui">
+(function () {
+'use strict';
+var L = LTSIM2, C = CORE;
+var $ = function (id) { return document.getElementById(id); };
+var MINUS = '\u2212';
+var nf = C.nf;
+function theme() {
+  var s = getComputedStyle(document.documentElement), g = function (n) { return s.getPropertyValue(n).trim(); };
+  return { text: g('--text'), muted: g('--muted'), grid: g('--grid'), panel: g('--panel'), blue: g('--blue'), ochre: g('--ochre'),
+    mag: g('--mag'), violet: g('--violet'), green: g('--green'), peach: g('--peach'), teal: g('--teal'), gray: g('--gray'), red: g('--red') };
+}
+function cv(el) {
+  var r = el.getBoundingClientRect(), w = Math.max(10, Math.round(r.width)), h = el.clientHeight || 100, d = window.devicePixelRatio || 1;
+  if (el.width !== Math.round(w * d) || el.height !== Math.round(h * d)) { el.width = Math.round(w * d); el.height = Math.round(h * d); }
+  var g = el.getContext('2d'); g.setTransform(d, 0, 0, d, 0, 0); g.clearRect(0, 0, w, h);
+  g.font = '12px system-ui,"Hiragino Sans","Yu Gothic",sans-serif';
+  return { g: g, w: w, h: h };
+}
+function niceStep(range, n) { var raw = range / n, p = Math.pow(10, Math.floor(Math.log10(raw))), f = raw / p; return (f < 1.5 ? 1 : f < 3 ? 2 : f < 7 ? 5 : 10) * p; }
+function ticks(lo, hi, n) { var s = niceStep(hi - lo, n), a = Math.ceil(lo / s - 1e-9), out = [], v; for (v = a; v * s <= hi + 1e-9; v++) out.push(+(v * s).toPrecision(10)); return out; }
+function tickLabel(v) { return String(v).replace('-', MINUS); }
+function pill(g, s, x, y, col, align) { g.font = '12px system-ui,"Hiragino Sans",sans-serif'; var w = g.measureText(s).width + 8, x0 = align === 'right' ? x - w : x; g.fillStyle = 'rgba(250,249,244,0.92)'; g.fillRect(x0, y - 12, w, 17); g.fillStyle = col; g.textAlign = 'left'; g.textBaseline = 'alphabetic'; g.fillText(s, x0 + 4, y); }
+function text(g, s, x, y, col, align, base) { g.fillStyle = col; g.textAlign = align || 'left'; g.textBaseline = base || 'alphabetic'; g.fillText(s, x, y); }
+
+/* ======================= タブ ======================= */
+function showTab(t) {
+  var A = t === 'A';
+  $('paneA').classList.toggle('hide', !A); $('paneB').classList.toggle('hide', A);
+  $('tabbtnA').setAttribute('aria-selected', A); $('tabbtnB').setAttribute('aria-selected', !A);
+  A ? drawA() : drawAll();
+}
+$('tabbtnA').onclick = function () { showTab('A'); };
+$('tabbtnB').onclick = function () { showTab('B'); };
+
+/* ======================= A: センサと位置 ======================= */
+var P0 = L.Params(), Q0 = L.Params2();
+function syncA(src) { var v = +src.value; if (isNaN(v)) return; v = Math.max(-45, Math.min(45, v)); $('aSl').value = v; if (src !== $('aNum')) $('aNum').value = v; drawA(); }
+$('aSl').oninput = function () { syncA(this); };
+$('aNum').onchange = function () { syncA(this); $('aNum').value = $('aSl').value; };
+function drawA() {
+  if ($('paneA').classList.contains('hide')) return;
+  var th = theme(), ymm = +$('aSl').value, y = ymm / 1000;
+  var rl = L.refl_band(y + Q0.d / 2, P0), rr = L.refl_band(y - Q0.d / 2, P0), pos = rr - rl, e = 0 - pos;
+  $('barL').style.width = rl + '%'; $('barR').style.width = rr + '%';
+  $('valL').textContent = nf(rl, 1) + ' %'; $('valR').textContent = nf(rr, 1) + ' %';
+  $('vPos').textContent = nf(pos, 1); $('vE').textContent = nf(e, 1);
+  var msg = '';
+  if (Math.abs(ymm) < 0.25) msg = '線の真上：左右の反射値が等しく、位置 = 0。';
+  else if (ymm > 0) msg = 'ロボットが線の左（図の上）へずれている：右のセンサのほうが黒に近く、右の反射値が小さい。位置 < 0、偏差 e > 0。';
+  else msg = 'ロボットが線の右（図の下）へずれている：左のセンサのほうが黒に近く、左の反射値が小さい。位置 > 0、偏差 e < 0。';
+  if (Math.abs(ymm) > L.lost_limit(P0, Q0) * 1000) msg += ' 両方のセンサがほぼ白の上にあり、位置が 0 に近づいている。';
+  $('aMsg').textContent = msg;
+  /* 上面図（縦横同じ縮尺） */
+  var c = cv($('aTop')), g = c.g, w = c.w, h = c.h, k = h / 170, cy = h / 2, py = function (mm) { return cy - mm * k; };
+  g.fillStyle = '#efeee6'; g.fillRect(0, 0, w, h);
+  g.fillStyle = '#1b1b1b'; g.fillRect(0, py(9.5), w, 19 * k);
+  g.strokeStyle = '#e8e8e0'; g.lineWidth = 1; g.setLineDash([6, 5]); g.beginPath(); g.moveTo(0, py(0)); g.lineTo(w, py(0)); g.stroke(); g.setLineDash([]);
+  var rx = Math.max(150, w * 0.45);                       // センサ列の中心の x
+  var pxm = k;                                            // 1 mm = k px（縦横同じ）
+  g.save(); g.translate(rx, py(ymm));
+  g.fillStyle = '#d9d9d2'; g.strokeStyle = '#333'; g.lineWidth = 1.2;
+  g.fillRect(-62 * pxm, -(Q0.d / 2 * 1000 + 8) * pxm, 56 * pxm, (Q0.d * 1000 + 16) * pxm);
+  g.strokeRect(-62 * pxm, -(Q0.d / 2 * 1000 + 8) * pxm, 56 * pxm, (Q0.d * 1000 + 16) * pxm);
+  g.fillStyle = th.violet; g.fillRect(-48 * pxm, -(Q0.d / 2 * 1000 + 8 + 5) * pxm, 22 * pxm, 6 * pxm);
+  g.fillStyle = th.green; g.fillRect(-48 * pxm, (Q0.d / 2 * 1000 + 8 - 1) * pxm, 22 * pxm, 6 * pxm);
+  [[-1, rl], [1, rr]].forEach(function (s) {
+    var v = Math.round(Math.max(0, Math.min(100, s[1])) / 100 * 255);
+    g.fillStyle = 'rgb(' + v + ',' + v + ',' + v + ')'; g.strokeStyle = s[0] < 0 ? th.violet : th.green; g.lineWidth = 3.5;
+    g.fillRect(-4 * pxm, s[0] * Q0.d / 2 * 1000 * pxm - 4 * pxm, 8 * pxm, 8 * pxm);
+    g.strokeRect(-4 * pxm, s[0] * Q0.d / 2 * 1000 * pxm - 4 * pxm, 8 * pxm, 8 * pxm);
+  });
+  g.restore();
+  pill(g, '左のセンサ', rx + 16, py(ymm + Q0.d / 2 * 1000) + 4, '#6a4cc0');
+  pill(g, '右のセンサ', rx + 16, py(ymm - Q0.d / 2 * 1000) + 4, '#2f7a12');
+  text(g, '進む向き（右へ）→', 8, 16, '#333');
+  text(g, '左（＋）', w - 8, 16, '#333', 'right'); text(g, '右（−）', w - 8, h - 8, '#333', 'right');
+  if (Math.abs(ymm) > 1) {                                // ずれの寸法線
+    var dx = Math.min(rx + 130, w - 100); g.strokeStyle = '#1f5fbf'; g.fillStyle = '#1f5fbf'; g.lineWidth = 1.5;
+    g.beginPath(); g.moveTo(dx, py(0)); g.lineTo(dx, py(ymm)); g.stroke();
+    g.beginPath(); g.moveTo(dx - 4, py(0)); g.lineTo(dx + 4, py(0)); g.moveTo(dx - 4, py(ymm)); g.lineTo(dx + 4, py(ymm)); g.stroke();
+    pill(g, 'ずれ ' + nf(ymm, 1) + ' mm', dx + 8, py(ymm / 2) + 4, '#1f5fbf');
+  }
+  /* ずれと位置のグラフ */
+  var gc = cv($('aGraph')), gg = gc.g, gw = gc.w, gh = gc.h, m = { l: 52, r: 12, t: 14, b: 40 };
+  var cur = L.position_curve(P0, Q0, 0.05, 401), ys = cur[0], ps = cur[1];
+  var lo = -75, hi = 75, X0 = m.l, X1 = gw - m.r, Y0 = m.t, Y1 = gh - m.b;
+  var xp = function (mm) { return X0 + (mm + 50) / 100 * (X1 - X0); }, yp = function (v) { return Y1 - (v - lo) / (hi - lo) * (Y1 - Y0); };
+  gg.strokeStyle = th.grid; gg.lineWidth = 1;
+  ticks(-50, 50, 10).forEach(function (v) { gg.beginPath(); gg.moveTo(xp(v), Y0); gg.lineTo(xp(v), Y1); gg.stroke(); text(gg, tickLabel(v), xp(v), Y1 + 14, th.muted, 'center'); });
+  ticks(lo, hi, 6).forEach(function (v) { gg.beginPath(); gg.moveTo(X0, yp(v)); gg.lineTo(X1, yp(v)); gg.stroke(); text(gg, tickLabel(v), X0 - 6, yp(v) + 4, th.muted, 'right'); });
+  gg.strokeStyle = th.text; gg.lineWidth = 0.8; gg.beginPath(); gg.moveTo(X0, yp(0)); gg.lineTo(X1, yp(0)); gg.moveTo(xp(0), Y0); gg.lineTo(xp(0), Y1); gg.stroke();
+  var ll = L.lost_limit(P0, Q0) * 1000;
+  gg.setLineDash([5, 4]); gg.strokeStyle = th.muted; gg.lineWidth = 1;
+  [-ll, ll].forEach(function (v) { gg.beginPath(); gg.moveTo(xp(v), Y0); gg.lineTo(xp(v), Y1); gg.stroke(); }); gg.setLineDash([]);
+  text(gg, '見失う限界 ' + nf(ll, 1) + ' mm', xp(ll) - 6, Y0 + 12, th.muted, 'right');
+  gg.strokeStyle = th.blue; gg.lineWidth = 2.2; gg.beginPath();
+  for (var i = 0; i < ys.length; i++) { var x = xp(ys[i] * 1000), yy = yp(ps[i]); i ? gg.lineTo(x, yy) : gg.moveTo(x, yy); } gg.stroke();
+  gg.fillStyle = th.blue; gg.strokeStyle = th.panel; gg.lineWidth = 2; gg.beginPath(); gg.arc(xp(ymm), yp(pos), 6, 0, 6.2832); gg.fill(); gg.stroke();
+  text(gg, '位置 [%]', 4, 12, th.text);
+  text(gg, 'ずれ [mm]（＋ = 左へずれる）', (X0 + X1) / 2, gh - 4, th.text, 'center');
+}
+
+/* ======================= B: 設定欄の生成 ======================= */
+var SPEC = {
+  kp: { label: 'K<sub>P</sub>', min: 0, max: 40, step: 0.1, g: 'gPid', dig: 1 },
+  ki: { label: 'K<sub>I</sub>', min: 0, max: 100, step: 0.1, g: 'gPid', dig: 1 },
+  kd: { label: 'K<sub>D</sub>', min: 0, max: 2, step: 0.01, g: 'gPid', dig: 2 },
+  U: { label: '大きさ U', min: 10, max: 100, step: 1, g: 'gOnoff', dig: 0 },
+  R: { label: '半径 R [m]', min: 0.2, max: 1.0, step: 0.05, g: 'gCurve', dig: 2 },
+  y0: { label: '最初のずれ [mm]', min: -20, max: 20, step: 0.5, g: 'gCond', dig: 1 },
+  base: { label: '基準の速さ [度/秒]', min: 50, max: 300, step: 10, g: 'gCond', dig: 0 },
+  noise: { label: '雑音 [%]', min: 0, max: 5, step: 0.5, g: 'gCond', dig: 1 },
+  T: { label: '走らせる時間 [s]', min: 2, max: 40, step: 1, g: 'gCond', dig: 0 }
+};
+Object.keys(SPEC).forEach(function (k) {
+  var s = SPEC[k], row = document.createElement('div'); row.className = 'row';
+  row.innerHTML = '<label for="' + k + '_r">' + s.label + '</label><input type="range" id="' + k + '_r" min="' + s.min + '" max="' + s.max + '" step="' + s.step + '"><input type="number" id="' + k + '_n" min="' + s.min + '" max="' + s.max + '" step="' + s.step + '">';
+  $(s.g).appendChild(row);
+  var r = $(k + '_r'), n = $(k + '_n');
+  r.oninput = function () { n.value = r.value; };
+  n.onchange = function () { var v = +n.value; if (isNaN(v)) v = +r.value; v = Math.max(s.min, Math.min(s.max, v)); n.value = v; r.value = v; };
+});
+$('course').onchange = function () { $('gCurve').classList.toggle('hide', this.value !== 'curve'); };
+Array.prototype.forEach.call(document.getElementsByName('mode'), function (el) { el.onchange = syncMode; });
+function getMode() { return document.querySelector('input[name=mode]:checked').value; }
+function syncMode() { var m = getMode(); $('gPid').classList.toggle('hide', m !== 'pid'); $('gOnoff').classList.toggle('hide', m !== 'onoff'); }
+function setVal(k, v) { $(k + '_r').value = v; $(k + '_n').value = v; }
+function readSettings() {
+  var c = {};
+  Object.keys(SPEC).forEach(function (k) { c[k] = +$(k + '_n').value; });
+  c.mode = getMode(); c.course = $('course').value; c.ctrl_dt = +$('ctrl_dt').value; c.imax = $('imax').value; c.band = +$('band').value;
+  return c;
+}
+function setSettings(c) {
+  Object.keys(SPEC).forEach(function (k) { setVal(k, c[k]); });
+  document.querySelector('input[name=mode][value=' + c.mode + ']').checked = true; syncMode();
+  $('course').value = c.course; $('course').onchange();
+  $('ctrl_dt').value = String(c.ctrl_dt); $('imax').value = c.imax; $('band').value = String(c.band === undefined ? 1 : c.band);
+}
+setSettings(C.DEF);
+
+var PRESETS = JSON.parse($('presets').textContent);
+(function () {
+  var sel = $('preset'); sel.innerHTML = '<option value="">（選んでください）</option>';
+  PRESETS.forEach(function (p, i) { var o = document.createElement('option'); o.value = i; o.textContent = p.name.replace(/K_P/g, 'K_P').replace(/K_I/g, 'K_I'); sel.appendChild(o); });
+})();
+
+/* ======================= B: 状態と実行 ======================= */
+var results = [], anim = null, MAXRES = 8;
+function cur() { return results[results.length - 1]; }
+function htmlLabel(c) { return C.labelText(c).replace(/K_([PID])/g, 'K<sub>$1</sub>').replace(/Δt/g, 'Δt'); }
+function stopAnim() { if (anim) { cancelAnimationFrame(anim.raf); anim = null; } }
+function doRun(animate) {
+  stopAnim(); $('preset').value = '';
+  var r = C.run(readSettings());
+  if (!$('keep').checked) results = [];
+  results.push(r); if (results.length > MAXRES) results.shift();
+  if (animate) { anim = { t: 0, last: performance.now(), raf: 0 }; anim.raf = requestAnimationFrame(tick); }
+  drawAll(); renderCards();
+}
+function tick(ts) {
+  if (!anim) return;
+  var dt = Math.min(0.1, (ts - anim.last) / 1000); anim.last = ts;
+  anim.t += dt * (+$('speed').value);
+  if (anim.t >= cur().cond.T) { anim = null; drawAll(); renderCards(); return; }
+  drawAll(); anim.raf = requestAnimationFrame(tick);
+}
+$('btnRun').onclick = function () { doRun(true); };
+$('btnNow').onclick = function () { doRun(false); };
+$('btnClear').onclick = function () { stopAnim(); results = []; drawAll(); renderCards(); };
+$('preset').onchange = function () {
+  stopAnim();
+  if (this.value === '') return;
+  var conds = C.expand(PRESETS[+this.value]);
+  results = conds.map(C.run);
+  $('keep').checked = true;
+  setSettings(conds[conds.length - 1]);
+  drawAll(); renderCards();
+};
+$('brk').onchange = function () { drawAll(); };
+$('detSpeed').addEventListener('toggle', function () { drawAll(); });
+
+/* ======================= B: 上面図 ======================= */
+var FLOOR = '#efeee6', FLOOR_CURVE = '#f3e7cf';
+function drawTop(t) {
+  var th = theme(), c = cv($('top')), g = c.g, w = c.w, h = c.h;
+  var hasCurve = results.length && cur().cond.course === 'curve';
+  var m = { l: 62, r: 14, t: hasCurve ? 110 : 26, b: 40 };
+  var X0 = m.l, X1 = w - m.r, Y0 = m.t, Y1 = h - m.b, LM = 50;
+  var ky = (Y1 - Y0) / (2 * LM), ymid = (Y0 + Y1) / 2, py = function (mm) { return ymid - mm * ky; };
+  if (!results.length) {
+    g.fillStyle = FLOOR; g.fillRect(X0, Y0, X1 - X0, Y1 - Y0);
+    text(g, '「走らせる」か「すぐ結果を見る」を押すか、お試しの組を選んでください。', (X0 + X1) / 2, ymid, '#333', 'center');
+    return;
+  }
+  var smax = 0.2; results.forEach(function (r) { smax = Math.max(smax, r.res.s[r.res.s.length - 1]); });
+  var xr0 = X0 + 62, xr1 = X1 - 48, kx = (xr1 - xr0) / smax, px = function (s) { return xr0 + s * kx; };
+  g.fillStyle = FLOOR; g.fillRect(X0, Y0, X1 - X0, Y1 - Y0);
+  if (hasCurve) {
+    var x1c = cur().res.course.x1; g.fillStyle = FLOOR_CURVE; g.fillRect(px(x1c), Y0, X1 - px(x1c), Y1 - Y0);
+    g.strokeStyle = '#b58b2a'; g.lineWidth = 1; g.setLineDash([4, 3]); g.beginPath(); g.moveTo(px(x1c), Y0); g.lineTo(px(x1c), Y1); g.stroke(); g.setLineDash([]);
+    text(g, 'ここからカーブ（左へ曲がる）', Math.min(px(x1c) + 6, X1 - 190), Y0 + 14, '#7a5a10');
+  }
+  g.fillStyle = '#1b1b1b'; g.fillRect(X0, py(9.5), X1 - X0, 19 * ky);
+  g.strokeStyle = '#e8e8e0'; g.lineWidth = 1; g.setLineDash([6, 5]); g.beginPath(); g.moveTo(X0, py(0)); g.lineTo(X1, py(0)); g.stroke(); g.setLineDash([]);
+  /* 軸 */
+  g.lineWidth = 1;
+  ticks(-LM, LM, 5).forEach(function (v) { text(g, tickLabel(v), X0 - 6, py(v) + 4, th.muted, 'right'); g.strokeStyle = th.muted; g.beginPath(); g.moveTo(X0 - 3, py(v)); g.lineTo(X0, py(v)); g.stroke(); });
+  ticks(0, smax, 6).forEach(function (v) { text(g, tickLabel(v), px(v), Y1 + 14, th.muted, 'center'); g.strokeStyle = th.muted; g.beginPath(); g.moveTo(px(v), Y1); g.lineTo(px(v), Y1 + 3); g.stroke(); });
+  g.strokeStyle = th.muted; g.strokeRect(X0 + 0.5, Y0 + 0.5, X1 - X0 - 1, Y1 - Y0 - 1);
+  text(g, '進んだ距離 [m]（線に沿って）', (X0 + X1) / 2, h - 6, th.text, 'center');
+  g.save(); g.translate(14, ymid); g.rotate(-Math.PI / 2); text(g, 'ずれ [mm]（横方向を拡大）', 0, 0, th.text, 'center'); g.restore();
+  text(g, '左', X0 + 4, Y0 + (hasCurve ? 30 : 14), '#555'); text(g, '右', X0 + 4, Y1 - 6, '#555');
+  /* 軌跡 */
+  g.save(); g.beginPath(); g.rect(X0, Y0, X1 - X0, Y1 - Y0); g.clip();
+  var cr = cur(), idxCur = t == null ? cr.res.t.length - 1 : Math.min(cr.res.t.length - 1, Math.floor(t / 0.01 + 1e-9));
+  results.forEach(function (r, i) {
+    var isCur = r === cr, n = isCur ? idxCur : r.res.t.length - 1, a = r.res;
+    g.strokeStyle = isCur ? '#1f5fbf' : '#8a8a86'; g.lineWidth = isCur ? 2.2 : 1.4; g.beginPath();
+    for (var j = 0; j <= n; j += 2) { var x = px(a.s[j]), y = py(a.y_s[j] * 1000); j ? g.lineTo(x, y) : g.moveTo(x, y); }
+    g.stroke();
+    if (!isCur || results.length > 1) { var xe = px(a.s[n]), ye = Math.max(Y0 + 8, Math.min(Y1 - 8, py(a.y_s[n] * 1000))); g.fillStyle = 'rgba(250,249,244,0.92)'; g.fillRect(xe + 3, ye - 21, 14, 15); g.fillStyle = isCur ? '#1f5fbf' : '#555'; g.font = 'bold 12px system-ui,sans-serif'; g.textAlign = 'left'; g.textBaseline = 'alphabetic'; g.fillText(String(i + 1), xe + 7, ye - 9); }
+  });
+  /* ロボット */
+  var a = cr.res, j = idxCur, cond = cr.cond;
+  var dxy = ky * 1000 / kx;                             // 縦横の縮尺の比（向きの見かけの誇張）
+  var ang = Math.atan(Math.tan(a.psi[j]) * dxy); ang = Math.max(-1.2, Math.min(1.2, ang));
+  var ds = 0.016 * 1000 * ky;
+  g.save(); g.translate(px(a.s[j]), py(a.y_s[j] * 1000)); g.rotate(-ang);
+  g.fillStyle = '#d9d9d2'; g.strokeStyle = '#2b2b2b'; g.lineWidth = 1.3;
+  g.fillRect(-52, -ds - 9, 48, 2 * ds + 18); g.strokeRect(-52, -ds - 9, 48, 2 * ds + 18);
+  g.fillStyle = th.violet; g.fillRect(-40, -ds - 9 - 7, 24, 8); g.fillStyle = th.green; g.fillRect(-40, ds + 9 - 1, 24, 8);
+  [[-1, a.rl[j]], [1, a.rr[j]]].forEach(function (s) {
+    var v = Math.round(Math.max(0, Math.min(100, s[1])) / 100 * 255);
+    g.fillStyle = 'rgb(' + v + ',' + v + ',' + v + ')'; g.strokeStyle = s[0] < 0 ? th.violet : th.green; g.lineWidth = 3.5;
+    g.fillRect(-5, s[0] * ds - 5, 10, 10); g.strokeRect(-5, s[0] * ds - 5, 10, 10);
+  });
+  g.restore(); g.restore();
+  results.forEach(function (r, i) {
+    if (!r.m.lost) return;
+    var n = r === cr ? idxCur : r.res.t.length - 1, k, up;
+    for (k = 0; k <= n; k++) if (Math.abs(r.res.y_s[k]) * 1000 > LM) break;
+    if (k > n) return;
+    up = r.res.y_s[k] > 0;
+    var lbl = (results.length > 1 ? (i + 1) + ': ' : '') + '枠の外へ（線を見失った）';
+    g.font = '11px system-ui,"Hiragino Sans",sans-serif'; var tw = g.measureText(lbl).width + 8, tx = Math.max(X0 + 2, Math.min(X1 - tw - 2, px(r.res.s[k]) - tw / 2)), ty = up ? Y0 + (hasCurve ? 40 : 24) + (i % 3) * 15 : Y1 - 12 - (i % 3) * 15;
+    g.fillStyle = 'rgba(250,249,244,0.92)'; g.fillRect(tx, ty - 11, tw, 15); g.fillStyle = r === cr ? '#1f5fbf' : '#555'; g.textAlign = 'left'; g.textBaseline = 'alphabetic'; g.fillText(lbl, tx + 4, ty);
+  });
+  if (hasCurve) drawMini(g, th, X1 - 150, 6, 140, 98, t == null ? idxCur : idxCur);
+}
+function drawMini(g, th, x, y, w, h, idx) {
+  var cr = cur(), a = cr.res, course = a.course, n = a.t.length, i;
+  var pts = [], lastS = a.s[n - 1];
+  for (i = 0; i <= 120; i++) pts.push(L.course_xy(course, lastS * i / 120, 0));
+  var xs = [], ys = [];
+  pts.forEach(function (p) { xs.push(p[0]); ys.push(p[1]); });
+  for (i = 0; i < n; i += 5) { xs.push(a.X[i]); ys.push(a.Y[i]); }
+  var x0 = Math.min.apply(null, xs), x1 = Math.max.apply(null, xs), y0 = Math.min.apply(null, ys), y1 = Math.max.apply(null, ys);
+  var sc = Math.min((w - 16) / Math.max(x1 - x0, 1e-3), (h - 30) / Math.max(y1 - y0, 1e-3));
+  var ox = x + 8 + ((w - 16) - (x1 - x0) * sc) / 2, oy = y + 6 + ((h - 30) + (y1 - y0) * sc) / 2;
+  var mx = function (X) { return ox + (X - x0) * sc; }, my = function (Y) { return oy - (Y - y0) * sc; };
+  g.fillStyle = 'rgba(245,244,238,0.96)'; g.strokeStyle = '#8a8a86'; g.lineWidth = 1; g.fillRect(x, y, w, h); g.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+  g.strokeStyle = '#1b1b1b'; g.lineWidth = 3; g.beginPath(); pts.forEach(function (p, k) { k ? g.lineTo(mx(p[0]), my(p[1])) : g.moveTo(mx(p[0]), my(p[1])); }); g.stroke();
+  g.strokeStyle = '#1f5fbf'; g.lineWidth = 1.3; g.beginPath(); for (i = 0; i <= idx; i += 3) { i ? g.lineTo(mx(a.Xs[i]), my(a.Ys[i])) : g.moveTo(mx(a.Xs[i]), my(a.Ys[i])); } g.stroke();
+  g.fillStyle = '#1f5fbf'; g.beginPath(); g.arc(mx(a.Xs[idx]), my(a.Ys[idx]), 3, 0, 6.2832); g.fill();
+  g.font = '11px system-ui,"Hiragino Sans",sans-serif'; g.fillStyle = '#333'; g.textAlign = 'center'; g.textBaseline = 'alphabetic';
+  g.fillText('本当の形（縮尺そのまま）', x + w / 2, y + h - 6);
+}
+
+/* ======================= B: 時間波形 ======================= */
+function drawWave(el, o, t) {
+  var th = theme(), c = cv(el), g = c.g, w = c.w, h = c.h, m = { l: 62, r: 14, t: 26, b: 22 };
+  var X0 = m.l, X1 = w - m.r, Y0 = m.t, Y1 = h - m.b;
+  var tmax = 2; results.forEach(function (r) { tmax = Math.max(tmax, r.cond.T); });
+  var xp = function (tt) { return X0 + tt / tmax * (X1 - X0); };
+  var lo = Infinity, hi = -Infinity;
+  results.forEach(function (r) { o.series.forEach(function (s) { var a = s.get(r); for (var i = o.skipFirst || 0; i < a.length; i += 3) { if (a[i] < lo) lo = a[i]; if (a[i] > hi) hi = a[i]; } }); });
+  if (o.include) { lo = Math.min(lo, o.include[0]); hi = Math.max(hi, o.include[1]); }
+  if (!isFinite(lo)) { lo = -1; hi = 1; }
+  if (o.cap) { lo = Math.max(lo, -o.cap); hi = Math.min(hi, o.cap); }
+  if (hi - lo < (o.minSpan || 1e-6)) { var mid = (hi + lo) / 2; lo = mid - (o.minSpan || 1) / 2; hi = mid + (o.minSpan || 1) / 2; }
+  var pad = (hi - lo) * 0.07; lo -= pad; hi += pad;
+  var yp = function (v) { return Y1 - (v - lo) / (hi - lo) * (Y1 - Y0); };
+  g.lineWidth = 1; g.strokeStyle = th.grid;
+  ticks(0, tmax, 8).forEach(function (v) { g.beginPath(); g.moveTo(xp(v), Y0); g.lineTo(xp(v), Y1); g.stroke(); text(g, tickLabel(v), xp(v), Y1 + 14, th.muted, 'center'); });
+  ticks(lo, hi, 4).forEach(function (v) { g.beginPath(); g.moveTo(X0, yp(v)); g.lineTo(X1, yp(v)); g.stroke(); text(g, tickLabel(v), X0 - 6, yp(v) + 4, th.muted, 'right'); });
+  g.strokeStyle = th.muted; g.strokeRect(X0 + 0.5, Y0 + 0.5, X1 - X0 - 1, Y1 - Y0 - 1);
+  g.save(); g.beginPath(); g.rect(X0, Y0, X1 - X0, Y1 - Y0); g.clip();
+  if (lo < 0 && hi > 0) { g.strokeStyle = th.text; g.lineWidth = 0.8; g.beginPath(); g.moveTo(X0, yp(0)); g.lineTo(X1, yp(0)); g.stroke(); }
+  (o.hlines || []).forEach(function (hl) { g.strokeStyle = th.muted; g.lineWidth = 1; g.setLineDash([6, 4]); g.beginPath(); g.moveTo(X0, yp(hl)); g.lineTo(X1, yp(hl)); g.stroke(); g.setLineDash([]); });
+  var cr = cur();
+  results.forEach(function (r, ri) {
+    var isCur = r === cr, N = r.res.t.length - 1, n = (isCur && t != null) ? Math.min(N, Math.floor(t / 0.01 + 1e-9)) : N;
+    o.series.forEach(function (s) {
+      if (s.onlyCur && !isCur) return;
+      var a = s.get(r);
+      g.strokeStyle = isCur ? th[s.col] || s.col : th.gray; g.lineWidth = isCur ? (s.w || 2) : 1.3;
+      g.setLineDash(isCur && s.dash ? s.dash : []);
+      g.beginPath(); for (var i = 0; i <= n; i++) { var x = xp(r.res.t[i]), y = yp(a[i]); i ? g.lineTo(x, y) : g.moveTo(x, y); } g.stroke(); g.setLineDash([]);
+    });
+  });
+  if (t != null) { g.strokeStyle = th.text; g.lineWidth = 1; g.beginPath(); g.moveTo(xp(t), Y0); g.lineTo(xp(t), Y1); g.stroke(); }
+  g.restore();
+  if (o.tags && results.length > 1) results.forEach(function (r, ri) {
+    var a = o.series[0].get(r), N = r.res.t.length - 1, isCur = r === cr, n = (isCur && t != null) ? Math.min(N, Math.floor(t / 0.01 + 1e-9)) : N;
+    var yy = Math.max(Y0 + 8, Math.min(Y1 - 8, yp(a[n]))), xx = Math.min(X1 - 10, xp(r.res.t[n]) + 3);
+    text(g, String(ri + 1), xx, yy - 3, isCur ? th[o.series[0].col] : th.muted, 'left');
+  });
+  if (o.clipNote) results.forEach(function (r, ri) {
+    if (!r.m.lost) return;
+    var a = o.series[0].get(r), N = r.res.t.length - 1, isCur = r === cr, n = (isCur && t != null) ? Math.min(N, Math.floor(t / 0.01 + 1e-9)) : N, k, up;
+    for (k = 0; k <= n; k++) if (a[k] > hi || a[k] < lo) break;
+    if (k > n) return;
+    up = a[k] > hi;
+    var lbl = (results.length > 1 ? (ri + 1) + ': ' : '') + '枠の外へ（線を見失った）';
+    g.font = '11px system-ui,"Hiragino Sans",sans-serif';
+    var tw = g.measureText(lbl).width, tx = Math.max(X0 + 4, Math.min(X1 - tw - 4, xp(r.res.t[k]) + 6)), ty = up ? Y0 + 12 + (ri % 3) * 13 : Y1 - 5 - (ri % 3) * 13;
+    text(g, lbl, tx, ty, isCur ? th[o.series[0].col] : th.muted, 'left');
+  });
+  text(g, o.title, 4, 13, th.text);
+  if (o.axisBottom) text(g, '時間 [s]', X1, 13, th.text, 'right');
+}
+function lineWaves(t) {
+  var brk = $('brk').checked;
+  drawWave($('wDev'), { title: 'ずれ [mm]', tags: true, clipNote: true, minSpan: 6, cap: 60, include: [-3, 3],
+    series: [{ get: function (r) { return Array.prototype.map.call(r.res.y_s, function (v) { return v * 1000; }); }, col: 'blue' }] }, t);
+  drawWave($('wE'), { title: '偏差 e [%]', minSpan: 10, cap: 100, include: [-5, 5],
+    series: [{ get: function (r) { return r.res.e; }, col: 'ochre' }] }, t);
+  var ser = [{ get: function (r) { return r.res.u; }, col: 'mag', w: 2.2 }];
+  if (brk) ser.push(
+    { get: function (r) { return r.res.p_term; }, col: 'text', w: 1.4, onlyCur: true },
+    { get: function (r) { return r.res.i_term; }, col: 'peach', w: 1.6, onlyCur: true },
+    { get: function (r) { return r.res.d_term; }, col: 'teal', w: 1.4, dash: [6, 4], onlyCur: true });
+  drawWave($('wMv'), { title: '操作量 mv [度/秒]', hlines: [100, -100], include: [-110, 110], skipFirst: brk ? 5 : 0, cap: brk ? 400 : 110, minSpan: 50, series: ser, axisBottom: !$('detSpeed').open }, t);
+  $('brkLegend').innerHTML = brk ? '<span><span class="sw" style="border-color:var(--mag)"></span>mv（上限で切った後）</span><span><span class="sw" style="border-color:var(--text)"></span>P の項（K<sub>P</sub>·e）</span><span><span class="sw" style="border-color:var(--peach)"></span>I の項（K<sub>I</sub>·積分）</span><span><span class="sw" style="border-color:var(--teal);border-top-style:dashed"></span>D の項（K<sub>D</sub>·e の変化の速さ）</span><span>最初の周期だけ D の項が極端に大きく（e ÷ Δt）、枠の外へ出る</span>' : '';
+  if ($('detSpeed').open) drawWave($('wV'), { title: '左右の車輪の速さ [度/秒]', minSpan: 20, cap: 450, axisBottom: true,
+    series: [{ get: function (r) { return r.res.v_L; }, col: 'violet' }, { get: function (r) { return r.res.v_R; }, col: 'green' }] }, t);
+}
+function renderLegend() {
+  var el = $('legend');
+  if (!results.length) { el.innerHTML = ''; return; }
+  el.innerHTML = results.map(function (r, i) {
+    var isCur = r === cur();
+    return '<span><span class="sw" style="border-color:' + (isCur ? 'var(--blue)' : 'var(--gray)') + '"></span><b>' + (i + 1) + '</b>　' + htmlLabel(r.cond) + (isCur ? '（色つき）' : '（前の結果）') + '</span>';
+  }).join('');
+}
+function drawAll() {
+  if ($('paneB').classList.contains('hide')) return;
+  var t = anim ? anim.t : null;
+  drawTop(t); lineWaves(t); renderLegend();
+}
+window.addEventListener('resize', function () { drawA(); drawAll(); });
+if (window.matchMedia) window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function () { drawA(); drawAll(); });
+
+/* ======================= B: 結果の数値 ======================= */
+function renderCards() {
+  var el = $('cards');
+  if (!results.length) { el.innerHTML = '<div class="note">まだ結果がありません。</div>'; return; }
+  if (anim) { el.innerHTML = '<div class="note">再生中です。終わると数値が出ます（すぐ見るなら「すぐ結果を見る」）。</div>'; return; }
+  el.innerHTML = results.map(function (r, i) {
+    var m = r.m, isCur = r === cur();
+    return '<div class="card' + (isCur ? ' cur' : '') + '"><h3>' + (i + 1) + '　' + htmlLabel(r.cond) + (isCur ? '　（色つき）' : '') + '</h3><dl>' +
+      '<dt>' + C.devLabel(r.cond) + '</dt><dd>' + nf(C.devValue(m, r.cond), 2) + ' mm</dd>' +
+      '<dt>ずれが ±' + C.g(m.band) + ' mm 以内に収まる時刻</dt><dd>' + C.fmtSettle(m) + '</dd>' +
+      '<dt>最後の 1 秒のずれの平均</dt><dd>' + C.fmtSteady(m) + '</dd>' +
+      '<dt>振動が続くか</dt><dd>' + C.fmtOsc(m) + '</dd>' +
+      '<dt>mv が上限に当たっていた時間</dt><dd>' + nf(m.sat * 100, 0) + ' %</dd></dl>' +
+      (m.lost ? '<div class="lostmsg">線を見失った（両方のセンサが白。位置が 0 になり、線の中央にいるように見えてしまう）</div>' : '') + '</div>';
+  }).join('');
+}
+
+/* ======================= B: 記録の表 ======================= */
+var HEAD = ['方式', 'K_P', 'K_I', 'K_D', '基準の速さ [度/秒]', 'コース', '最初のずれ [mm]', '行き過ぎ量または最大のずれ [mm]', '収まったとみなす幅 [mm]', '収まる時刻',
+  '最後の 1 秒のずれの平均 [mm]', '振動', 'mv が上限に当たっていた時間 [%]', '線の見失い', 'メモ'];
+var recs = [];
+function recCells(r) {
+  var c = r.cond, m = r.m, onoff = c.mode === 'onoff';
+  var kind = onoff ? 'ON-OFF（U=' + C.g(c.U) + '）' : ((c.ki === 0 && c.kd === 0) ? 'P だけ' : (c.kd === 0 ? 'PI' : (c.ki === 0 ? 'PD' : 'PID')));
+  if (c.ctrl_dt !== 10) kind += '・Δt ' + C.g(c.ctrl_dt) + ' ms';
+  if (c.imax === 'none') kind += '・積分の上限なし';
+  if (c.noise > 0) kind += '・雑音 ' + C.g(c.noise) + ' %';
+  return [kind, onoff ? '—' : C.g(c.kp), onoff ? '—' : C.g(c.ki), onoff ? '—' : C.g(c.kd), C.g(c.base),
+    c.course === 'curve' ? 'カーブ R=' + C.g(c.R) + ' m' : '直線', C.g(c.y0), (c.y0 === 0 ? '最大 ' : '') + nf(C.devValue(m, c), 2),
+    '±' + C.g(m.band), C.fmtSettle(m), m.osc.sustained ? '—（振動中）' : nf(m.steady, 2),
+    C.fmtOsc(m), nf(m.sat * 100, 0), m.lost ? '見失った' : 'なし'];
+}
+function renderRec() {
+  $('recTable').tBodies[0].innerHTML = '';
+  $('recTable').tHead.innerHTML = '<tr><th>#</th>' + HEAD.map(function (h) { return '<th>' + h.replace(/K_([PID])/g, 'K<sub>$1</sub>') + '</th>'; }).join('') + '<th></th></tr>';
+  recs.forEach(function (rc, i) {
+    var tr = document.createElement('tr');
+    tr.innerHTML = '<td class="num">' + (i + 1) + '</td>' + rc.cells.map(function (v, k) { return '<td' + (k >= 1 && k <= 3 || k >= 6 ? ' class="num"' : '') + '>' + v + '</td>'; }).join('') + '<td><input type="text" aria-label="メモ"></td><td><button class="b" aria-label="この行を消す">×</button></td>';
+    var inp = tr.querySelector('input'); inp.value = rc.memo; inp.oninput = function () { rc.memo = inp.value; };
+    tr.querySelector('button').onclick = function () { recs.splice(i, 1); renderRec(); };
+    $('recTable').tBodies[0].appendChild(tr);
+  });
+  if (!recs.length) { var tr = document.createElement('tr'); tr.innerHTML = '<td colspan="' + (HEAD.length + 2) + '" class="note">まだ記録がありません。</td>'; $('recTable').tBodies[0].appendChild(tr); }
+}
+$('btnRec').onclick = function () {
+  if (!results.length || anim) return;
+  recs.push({ cells: recCells(cur()), memo: '' }); renderRec();
+};
+$('btnCopy').onclick = function () {
+  var clean = function (s) { return String(s).replace(/[\t\r\n]+/g, ' '); };
+  var lines = [HEAD.join('\t')].concat(recs.map(function (rc) { return rc.cells.concat([rc.memo]).map(clean).join('\t'); }));
+  var tsv = lines.join('\n'), msg = $('copyMsg');
+  var done = function (ok) { msg.textContent = ok ? 'コピーしました（' + recs.length + ' 行）。表計算ソフトに貼り付けられます。' : 'コピーできませんでした。'; };
+  var fallback = function () {
+    var ta = document.createElement('textarea'); ta.value = tsv; ta.style.position = 'fixed'; ta.style.opacity = '0'; document.body.appendChild(ta); ta.select();
+    var ok = false; try { ok = document.execCommand('copy'); } catch (e) {} document.body.removeChild(ta); done(ok);
+  };
+  if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(tsv).then(function () { done(true); }, fallback); else fallback();
+};
+
+window.__sim = { get results() { return results; }, get recs() { return recs; }, drawAll: drawAll, showTab: showTab, setSettings: setSettings, readSettings: readSettings, setAnimT: function (t) { stopAnim(); anim = { t: t, last: 0, raf: 0 }; drawAll(); }, endAnim: function () { anim = null; drawAll(); } };
+renderRec(); renderCards(); drawA();
+})();
+</script>
+</body>
+</html>
