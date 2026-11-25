@@ -83,6 +83,15 @@ summary{cursor:pointer;font-size:13px}
 .gridA{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px}
 @media (max-width:900px){.gridA{grid-template-columns:minmax(0,1fr)}}
 .section{margin-top:14px}
+.banner{background:var(--chip);border:2px solid var(--ochre);border-radius:8px;padding:8px 12px;margin:0 0 12px;font-weight:700}
+.note2{font-size:12px;color:var(--muted);margin:0 0 6px;grid-column:1/-1}
+.mrow{margin:6px 0 0}
+.err{color:var(--red);font-weight:700;font-size:13px}
+details.mach{border:1px solid var(--border);border-radius:8px;padding:6px 10px;margin:0 0 10px;background:var(--panel)}
+details.mach summary{font-weight:700}
+.mgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:4px 16px}
+.mrow2 label{font-size:13px}
+.info{font-size:13px;margin:6px 0;font-variant-numeric:tabular-nums}
 </style>
 </head>
 <body>
@@ -104,11 +113,19 @@ summary{cursor:pointer;font-size:13px}
       <input type="number" id="aNum" min="-45" max="45" step="0.5" value="0">
     </div>
     <div class="note">ずれ = 線の中心線から、センサ列の中心までの横ずれ。＋は左（図の上）、−は右（図の下）。</div>
+    <div id="machBannerA" class="banner hide">機体の設定を標準から変えています（解説資料・動画の数値とは合いません）</div>
+    <details class="mach" open>
+      <summary>反射と寸法の設定（タブ B の「機体の設定」と共通）</summary>
+      <div class="note" style="margin-top:6px">どちらのタブで変えても両方に反映されます。センサの位置 ell・車輪の間隔 T・車輪の直径 D・モータの反応の遅れは、タブ B の「機体の設定」で変えられます。</div>
+      <div id="aNums" class="mgrid"></div>
+      <div class="err" id="aErr"></div>
+      <div class="btns"><button class="b" id="btnAReset">標準に戻す</button></div>
+    </details>
     <div class="gridA">
       <div>
         <h2>上面図（ロボットは右へ進む。上がロボットの左）</h2>
         <canvas id="aTop" class="cv" style="height:270px" aria-label="上面図"></canvas>
-        <div class="note">黒い帯 = 線（幅 19 mm、仮定）、白い破線 = 中心線。センサの間隔は 32 mm（仮定）。車体は模式図。</div>
+        <div class="note">黒い帯 = 線（幅は機体の設定どおり。標準 19 mm、仮定）、白い破線 = 中心線。センサの間隔・位置も機体の設定どおり（標準 32 mm、仮定）。車体は模式図。<b>機体の設定はタブ B で変えられます。</b></div>
         <div class="barrow"><span><span class="chipL"></span>左のセンサ（上）</span><div class="bar"><i id="barL"></i></div><span class="val" id="valL"></span></div>
         <div class="barrow"><span><span class="chipR"></span>右のセンサ（下）</span><div class="bar"><i id="barR"></i></div><span class="val" id="valR"></span></div>
         <div class="eq big">位置 ＝ 右 − 左 ＝ <b class="val" id="vPos"></b> %</div>
@@ -116,16 +133,39 @@ summary{cursor:pointer;font-size:13px}
         <div class="note" id="aMsg"></div>
       </div>
       <div>
+        <h2>1 つのセンサの反射値</h2>
+        <canvas id="aSens" class="cv" style="height:260px" aria-label="1 つのセンサの反射値のグラフ"></canvas>
+        <div class="note">横軸はセンサの、線の中心線からの横の位置（＋ = 左）。薄く塗った帯が黒い線。紫の点が今の左のセンサ、緑の点が右のセンサ。</div>
         <h2>ずれと位置の関係</h2>
         <canvas id="aGraph" class="cv" style="height:300px" aria-label="ずれと位置のグラフ"></canvas>
-        <div class="note">青い曲線がずれと位置の関係。丸が今のずれ。ずれが大きくなりすぎると、両方のセンサが白の上に乗り、位置が 0 に近づく（線の中央にいるように見えてしまう）。</div>
+        <div class="note">青い曲線がずれと位置の関係。丸が今のずれ。ずれが大きくなりすぎると、両方のセンサが白の上に乗り、位置が 0 に近づく（線の中央にいるように見えてしまう）。センサの間隔が広く、にじみが小さいと、中央付近で曲線が平らになる（ずれが変わっても位置が変わらない範囲ができる）。</div>
       </div>
     </div>
+    <details class="mach" id="fitBox">
+      <summary>実機で測った値に合わせる</summary>
+      <div class="note" style="margin-top:6px">1 つのセンサを、線をまたいで数 mm ずつ横に動かし、そのつど反射値を読みます。位置は、線の中心にセンサの中心が来たときを 0、左（ロボットの進む向きに向かって左）を＋にします。</div>
+      <div class="note"><b>測り方の例</b>：シリアル通信で左右の反射値をパソコンに出しながら、ロボットを線と直角に 2〜3 mm ずつずらして、そのつど「ずれ・左・右」を 1 行ずつ書く。線をまたいで両側の白まで（ずれ −40〜+40 mm 程度）測る。センサ 1 つだけを動かして測ったときは「位置・反射値」の 2 列。</div>
+      <div class="radios" style="margin:4px 0"><label><input type="radio" name="fitmode" value="3" checked> 3 列：ロボットのずれ・左・右</label><label><input type="radio" name="fitmode" value="1"> 2 列：センサの位置・反射値（センサ 1 つ）</label></div>
+      <div class="note" id="fitModeNote"></div>
+      <div class="scroll"><table id="fitTable" style="max-width:460px"><thead></thead><tbody></tbody></table></div>
+      <div class="btns"><button class="b" id="btnFitAdd">行を足す</button><button class="b" id="btnFitClear">全部消す</button></div>
+      <label for="fitPaste" class="note" style="display:block">タブ区切り（表計算ソフトからの貼り付け）・コンマ・空白区切りで、1 行ずつ貼り付けて「取り込む」を押します。列の数（2 列か 3 列）で自動的に形を判別します。</label>
+      <textarea id="fitPaste" rows="3" style="width:100%;font:inherit;color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:6px"></textarea>
+      <div class="btns"><button class="b" id="btnFitImport">取り込む</button><button class="b pri" id="btnFit">測った値に合わせる</button></div>
+      <div class="err" id="fitErr"></div>
+      <canvas id="fitCv" class="cv" style="height:260px" aria-label="測定点と合わせた曲線"></canvas>
+      <div class="legend"><span><span class="sw" style="border-color:var(--ochre)"></span>測定点（センサ 1 つ）</span><span><span class="sw" style="border-color:var(--violet)"></span>左のセンサ</span><span><span class="sw" style="border-color:var(--green)"></span>右のセンサ</span><span><span class="sw" style="border-color:var(--gray)"></span>今の機体の設定の曲線</span><span><span class="sw" style="border-color:var(--teal);border-top-style:dashed"></span>合わせた曲線</span></div>
+      <div class="info" id="fitRes"></div>
+      <div class="btns"><button class="b" id="btnFitUse" disabled>この値を機体の設定に使う</button></div>
+      <div class="note">合わせるのは r<sub>w</sub>・r<sub>b</sub>・にじみ・線の幅 w と、位置の原点のずれ c（測るときの 0 の置き方の誤差）です。c は機体の設定には入れません。点が 12 個以上（線の両側の白まで）必要です。3 列のときは、計算モデルは左右のセンサを同じ特性として走らせます（左右の差は表示だけ）。</div>
+    </details>
   </div>
 </div>
 
 <!-- ===================== B ===================== -->
 <div id="paneB" role="tabpanel" class="hide">
+  <div id="machBanner" class="banner hide">機体の設定を標準から変えています（解説資料・動画の数値とは合いません）</div>
+  <div id="machNote" class="banner hide"></div>
   <div class="layout">
     <div class="panel" id="settings">
       <h2>設定</h2>
@@ -164,6 +204,26 @@ summary{cursor:pointer;font-size:13px}
           <select id="imax"><option value="auto">あり（mv の上限を超えないよう切る）</option><option value="none">なし</option></select>
         </div>
       </fieldset>
+      <details class="mach" id="machine">
+        <summary>機体の設定（自分のロボットに合わせる）</summary>
+        <div class="note" style="margin-top:6px">寸法は物差しで測った値を入れます。標準は計算モデルの既定値（解説資料・動画と同じ）です。</div>
+        <div id="mNums"></div>
+        <div class="err" id="mErr"></div>
+        <div class="row mrow" style="grid-template-columns:minmax(0,5.2em) minmax(0,1fr)">
+          <label for="m_height">センサの高さ</label>
+          <select id="m_height"><option value="low">低い（にじみ 5 mm）</option><option value="normal" selected>ふつう（にじみ 8 mm）</option><option value="high">高い（にじみ 12 mm）</option><option value="custom">その他（にじみのスライダで指定）</option></select>
+        </div>
+        <div class="note2">センサと床の距離の目安。選ぶと「にじみ」が 5 / 8 / 12 mm になります（上の「にじみ」のスライダでも決められます）。</div>
+        <div class="row mrow" style="grid-template-columns:minmax(0,5.2em) minmax(0,1fr)">
+          <label for="m_delay">モータの反応の遅れ</label>
+          <select id="m_delay"><option value="fast">速い（むだ時間 0.01 s・時定数 0.05 s）</option><option value="normal" selected>ふつう（0.02 s・0.08 s）</option><option value="slow">遅い（0.04 s・0.15 s）</option></select>
+        </div>
+        <div class="note2">指令を出してからモータが追従するまでの遅れ。重い・電池が減っているなどで遅くなります。</div>
+        <div class="btns"><button class="b" id="btnMReset">標準に戻す</button><button class="b" id="btnKu">限界のゲインを計算する</button></div>
+        <div class="info" id="mInfo"></div>
+        <div class="info" id="mKu"></div>
+        <div class="note">実機で振動が続き始めた K<sub>P</sub> とその周期を測り、K<sub>u</sub>・T<sub>u</sub> が近くなるように「反応の遅れ」や寸法を選び直すと、実機に近づきます。</div>
+      </details>
       <div class="btns">
         <button class="b pri" id="btnRun">走らせる</button>
         <button class="b" id="btnNow">すぐ結果を見る</button>
@@ -180,7 +240,7 @@ summary{cursor:pointer;font-size:13px}
       <div class="panel">
         <h2>上面図（コースを線に沿って展開。横方向を拡大）</h2>
         <canvas id="top" class="cv" style="height:340px" aria-label="走行の上面図"></canvas>
-        <div class="note">黒い帯 = 線（幅 19 mm、仮定）、白い破線 = 中心線。上がロボットの左。センサの色は反射値（暗いほど黒に近い）、車輪は紫 = 左・緑 = 右。ロボットの向きは誇張、車体は模式図。</div>
+        <div class="note">黒い帯 = 線（幅は機体の設定どおり。標準 19 mm、仮定）、白い破線 = 中心線。上がロボットの左。センサの色は反射値（暗いほど黒に近い）、車輪は紫 = 左・緑 = 右。ロボットの向きは誇張、車体は模式図。</div>
         <div class="legend" id="legend"></div>
       </div>
       <div class="panel section">
@@ -572,7 +632,89 @@ if (typeof module !== 'undefined') module.exports = LTSIM2; else window.LTSIM2 =
 var CORE = (function (L) {
   'use strict';
   var DEF = { mode: 'pid', kp: 1, ki: 0.1, kd: 0.1, U: 100, course: 'straight', R: 0.3, y0: 10, base: 100,
-              noise: 0, ctrl_dt: 10, imax: 'auto', band: 1, T: 8 };
+              noise: 0, ctrl_dt: 10, imax: 'auto', band: 1, T: 8, mach: DEFM };
+  // 機体の設定（既定 = ltsim2.js の標準）。d・ell・T・D・w は mm、rw・rb は反射値 [%]
+  var DEFM = { d: 32, ell: 30, T: 112, D: 56, w: 19, rw: 100, rb: 10, sigma: 8, delay: 'normal' };
+  DEF.mach = DEFM;   // DEF は DEFM より前に書いてあるので、ここで入れる
+  var DELAY = { fast: [0.01, 0.05], normal: [0.02, 0.08], slow: [0.04, 0.15] };
+  var DNAME = { fast: '速い', normal: 'ふつう', slow: '遅い' };
+  function isStdMach(m) { var k; for (k in DEFM) if (m[k] !== DEFM[k]) return false; return true; }
+  function machParams(m) {
+    var dl = DELAY[m.delay];
+    return { p: L.Params({ D: m.D / 1000, T: m.T / 1000, ell: m.ell / 1000, w: m.w / 1000, sigma: m.sigma / 1000, r_w: m.rw, r_b: m.rb, L: dl[0], tau: dl[1] }), d: m.d / 1000 };
+  }
+  function machText(m) {
+    if (isStdMach(m)) return '標準';
+    return '自分の設定（d ' + m.d + ' mm・ell ' + m.ell + ' mm・T ' + m.T + ' mm・遅れ ' + DNAME[m.delay] + (m.sigma !== DEFM.sigma || m.w !== DEFM.w || m.rw !== DEFM.rw || m.rb !== DEFM.rb ? '・反射の値も変更' : '') + '）';
+  }
+  // 反射の測定値に合わせる。pts = [{x: 位置 mm, y: 反射値 %}]。反射の曲線は ltsim2.js の refl_band を Params の値で呼んで作る
+  //（r_w = 1・r_b = 0 の曲線 S が「黒の幅と にじみ」の形。反射値 = r_b + (r_w - r_b)·S なので r_w・r_b は線形の最小二乗で決める）。
+  // にじみ sigma・線の幅 w・原点のずれ c は、格子探索のあと Nelder-Mead で詰める。
+  function fitReflect(pts) {
+    var n = pts.length, i;
+    function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
+    function ev(x3) {
+      var sg = x3[0], w = x3[1], c = x3[2], pen = 0;
+      if (sg < 1 || sg > 20) { pen += 1e4 * (sg < 1 ? 1 - sg : sg - 20); sg = clamp(sg, 1, 20); }
+      if (w < 5 || w > 60) { pen += 1e4 * (w < 5 ? 5 - w : w - 60); w = clamp(w, 5, 60); }
+      if (Math.abs(c) > 12) { pen += 1e4 * (Math.abs(c) - 12); c = clamp(c, -12, 12); }
+      var p = L.Params({ r_w: 1, r_b: 0, sigma: sg / 1000, w: w / 1000 }), S = new Array(n), sm = 0, sy = 0, j;
+      for (j = 0; j < n; j++) { S[j] = L.refl_band((pts[j].x - c) / 1000, p); sm += S[j]; sy += pts[j].y; }
+      sm /= n; sy /= n;
+      var cov = 0, vr = 0;
+      for (j = 0; j < n; j++) { cov += (S[j] - sm) * (pts[j].y - sy); vr += (S[j] - sm) * (S[j] - sm); }
+      var k = vr > 1e-12 ? cov / vr : 0, rb = clamp(sy - k * sm, 0, 100), rw = clamp(rb + k, 0, 100), sse = 0;
+      for (j = 0; j < n; j++) { var r = rb + (rw - rb) * S[j] - pts[j].y; sse += r * r; }
+      return { sse: sse + pen, rw: rw, rb: rb, sg: sg, w: w, c: c };
+    }
+    var best = null, sg, w, c, e;
+    for (sg = 2; sg <= 15; sg += 1) for (w = 8; w <= 50; w += 2) for (c = -10; c <= 10; c += 1) {
+      e = ev([sg, w, c]); if (!best || e.sse < best.sse) best = { sse: e.sse, x: [sg, w, c] };
+    }
+    // Nelder-Mead（sigma・w・c の 3 変数）
+    var steps = [1, 2, 1], sim = [best.x.slice()], f = [best.sse], k2;
+    for (k2 = 0; k2 < 3; k2++) { var v = best.x.slice(); v[k2] += steps[k2]; sim.push(v); f.push(ev(v).sse); }
+    for (var it = 0; it < 400; it++) {
+      var idx = [0, 1, 2, 3].sort(function (a, b) { return f[a] - f[b]; });
+      sim = idx.map(function (q) { return sim[q]; }); f = idx.map(function (q) { return f[q]; });
+      if (Math.abs(f[3] - f[0]) < 1e-12) break;
+      var cen = [0, 0, 0], q2, d2;
+      for (q2 = 0; q2 < 3; q2++) for (d2 = 0; d2 < 3; d2++) cen[d2] += sim[q2][d2] / 3;
+      function pt(t) { return cen.map(function (cv, d) { return cv + t * (sim[3][d] - cv); }); }
+      var xr = pt(-1), fr = ev(xr).sse;
+      if (fr < f[0]) { var xe = pt(-2), fe = ev(xe).sse; if (fe < fr) { sim[3] = xe; f[3] = fe; } else { sim[3] = xr; f[3] = fr; } }
+      else if (fr < f[2]) { sim[3] = xr; f[3] = fr; }
+      else {
+        var xc = pt(fr < f[3] ? -0.5 : 0.5), fc = ev(xc).sse;
+        if (fc < Math.min(fr, f[3])) { sim[3] = xc; f[3] = fc; }
+        else { for (q2 = 1; q2 < 4; q2++) { sim[q2] = sim[q2].map(function (vv, d) { return sim[0][d] + 0.5 * (vv - sim[0][d]); }); f[q2] = ev(sim[q2]).sse; } }
+      }
+    }
+    var bi = 0; for (i = 1; i < 4; i++) if (f[i] < f[bi]) bi = i;
+    var fin = ev(sim[bi]), mae = 0;
+    var p2 = L.Params({ r_w: fin.rw, r_b: fin.rb, sigma: fin.sg / 1000, w: fin.w / 1000 });
+    for (i = 0; i < n; i++) mae += Math.abs(L.refl_band((pts[i].x - fin.c) / 1000, p2) - pts[i].y);
+    return { rw: fin.rw, rb: fin.rb, sigma: fin.sg, w: fin.w, c: fin.c, mae: mae / n, rmse: Math.sqrt(fin.sse / n) };
+  }
+  // 形が決まった（sigma・w・c）あとで、r_w・r_b だけを線形の最小二乗で求める（左だけ・右だけの比較用）
+  function fitLevels(pts, sg, w, c) {
+    var p = L.Params({ r_w: 1, r_b: 0, sigma: sg / 1000, w: w / 1000 }), n = pts.length, S = [], sm = 0, sy = 0, j;
+    for (j = 0; j < n; j++) { S.push(L.refl_band((pts[j].x - c) / 1000, p)); sm += S[j]; sy += pts[j].y; }
+    sm /= n; sy /= n;
+    var cov = 0, vr = 0;
+    for (j = 0; j < n; j++) { cov += (S[j] - sm) * (pts[j].y - sy); vr += (S[j] - sm) * (S[j] - sm); }
+    var k = vr > 1e-12 ? cov / vr : 0, rb = Math.max(0, Math.min(100, sy - k * sm));
+    return { rb: rb, rw: Math.max(0, Math.min(100, rb + k)) };
+  }
+  // 左右 2 つのセンサの測定（rows = [{y: ロボットのずれ mm, l: 左の反射値, r: 右の反射値}]、d = センサの間隔 mm）。
+  // 左のセンサは y + d/2、右は y - d/2 の位置として 1 本の曲線に合わせる。
+  function fitReflect3(rows, d) {
+    var pts = [], Lp = [], Rp = [];
+    rows.forEach(function (q) { pts.push({ x: q.y + d / 2, y: q.l }); pts.push({ x: q.y - d / 2, y: q.r }); Lp.push({ x: q.y + d / 2, y: q.l }); Rp.push({ x: q.y - d / 2, y: q.r }); });
+    var all = fitReflect(pts), a = fitLevels(Lp, all.sigma, all.w, all.c), b = fitLevels(Rp, all.sigma, all.w, all.c);
+    all.left = a; all.right = b; all.mismatch = Math.abs(a.rw - b.rw) >= 5 || Math.abs(a.rb - b.rb) >= 5; all.d = d;
+    return all;
+  }
   function merge() { var o = {}, i, k; for (i = 0; i < arguments.length; i++) for (k in arguments[i]) o[k] = arguments[i][k]; return o; }
   function expand(preset) { return preset.runs.map(function (r) { return merge(DEF, preset.common, r); }); }
   var MINUS = '\u2212';
@@ -610,9 +752,10 @@ var CORE = (function (L) {
   function fmtOsc(m) { return m.osc.sustained ? '続く（幅 ' + nf(m.osc.width, 2) + ' mm、周期 ' + (isFinite(m.osc.period) ? nf(m.osc.period, 2) + ' s' : '\u2014') + '）' : 'なし'; }
   function run(c) {
     var ctrl = c.mode === 'onoff' ? L.OnOff2(c.U) : L.PID2(c.kp, c.ki, c.kd);
-    var q = L.Params2({ base: c.base, i_max: c.imax === 'none' ? null : 'auto' });
+    var mp = machParams(c.mach || DEFM);
+    var q = L.Params2({ base: c.base, i_max: c.imax === 'none' ? null : 'auto', d: mp.d });
     var course = c.course === 'curve' ? L.Curve(0.1, c.R) : L.Straight();
-    var res = L.simulate2(ctrl, c.T, { y0: c.y0 / 1000, course: course, q: q, noise_std: c.noise, seed: 0, ctrl_dt: c.ctrl_dt / 1000 });
+    var res = L.simulate2(ctrl, c.T, { y0: c.y0 / 1000, course: course, p: mp.p, q: q, noise_std: c.noise, seed: 0, ctrl_dt: c.ctrl_dt / 1000 });
     return { cond: c, res: res, m: metrics(res, c) };
   }
   function g(v) { return String(+(+v).toPrecision(6)).replace('-', MINUS); }   // minus sign, not a hyphen / 負号はマイナス記号で
@@ -630,9 +773,10 @@ var CORE = (function (L) {
     if (c.noise > 0) s += '・雑音 ' + g(c.noise) + ' %';
     if (c.ctrl_dt !== 10) s += '・Δt=' + g(c.ctrl_dt) + ' ms';
     if (c.imax === 'none') s += '・積分の上限なし';
+    if (c.mach && !isStdMach(c.mach)) s += '・自分の機体';
     return s;
   }
-  return { DEF: DEF, merge: merge, expand: expand, run: run, metrics: metrics, labelText: labelText, g: g, nf: nf, devLabel: devLabel, devValue: devValue, fmtSettle: fmtSettle, fmtSteady: fmtSteady, fmtOsc: fmtOsc };
+  return { DEF: DEF, merge: merge, expand: expand, run: run, metrics: metrics, labelText: labelText, g: g, nf: nf, fitReflect: fitReflect, fitReflect3: fitReflect3, DEFM: DEFM, isStdMach: isStdMach, machParams: machParams, machText: machText, devLabel: devLabel, devValue: devValue, fmtSettle: fmtSettle, fmtSteady: fmtSteady, fmtOsc: fmtOsc };
 })(LTSIM2);
 </script>
 
@@ -672,10 +816,109 @@ $('tabbtnA').onclick = function () { showTab('A'); };
 $('tabbtnB').onclick = function () { showTab('B'); };
 
 /* ======================= A: センサと位置 ======================= */
+/* ======================= 機体の設定（タブ A・B で共通） ======================= */
 var P0 = L.Params(), Q0 = L.Params2();
+var Mst = Object.assign({}, C.DEFM);
+var MSPEC = {
+  d: { label: 'センサの間隔 d [mm]', min: 16, max: 60, step: 1, desc: '左右のカラーセンサの中心どうしの距離' },
+  ell: { label: 'センサの位置 ell [mm]', min: 0, max: 100, step: 1, desc: '車輪の軸から、センサの中心までの前後の距離（前が＋）' },
+  T: { label: '車輪の間隔 T [mm]', min: 60, max: 200, step: 1, desc: '左右の車輪の中心どうしの距離' },
+  D: { label: '車輪の直径 D [mm]', min: 30, max: 100, step: 1, desc: 'タイヤの外径（標準 56）' },
+  w: { label: '線の幅 w [mm]', min: 10, max: 50, step: 1, desc: '黒い線の幅' },
+  rw: { label: '白の上の反射値 r<sub>w</sub> [%]', min: 50, max: 100, step: 1, desc: 'センサを白い床に当てたとき読める値' },
+  rb: { label: '黒の上の反射値 r<sub>b</sub> [%]', min: 0, max: 40, step: 1, desc: 'センサを黒い線に当てたとき読める値（r<sub>w</sub> より 20 以上小さく）' },
+  sigma: { label: 'にじみ σ [mm]', min: 2, max: 15, step: 0.5, desc: '線の縁で反射値がなだらかに変わる幅。センサが床から高いほど大きくなる（高さとにじみの関係は実機で測っていない。「実機で測った値に合わせる」で決めるのがよい）' }
+};
+var HSIGMA = { low: 5, normal: 8, high: 12 };
+function buildM(prefix, container, keys) {
+  keys.forEach(function (k) {
+    var s = MSPEC[k], d = document.createElement('div'); d.className = 'mrow2';
+    d.innerHTML = '<label for="' + prefix + '_' + k + '_r">' + s.label + '</label><div class="row" style="grid-template-columns:minmax(0,1fr) 5.4em;margin:2px 0"><input type="range" id="' + prefix + '_' + k + '_r" min="' + s.min + '" max="' + s.max + '" step="' + s.step + '" value="' + Mst[k] + '"><input type="number" id="' + prefix + '_' + k + '_n" min="' + s.min + '" max="' + s.max + '" step="' + s.step + '" value="' + Mst[k] + '"></div><div class="note2">' + s.desc + '</div>';
+    container.appendChild(d);
+    $(prefix + '_' + k + '_r').oninput = function () { setField(k, +this.value); };
+    $(prefix + '_' + k + '_n').onchange = function () { setField(k, +this.value); };
+  });
+}
+buildM('m', $('mNums'), ['d', 'ell', 'T', 'D', 'w', 'rw', 'rb', 'sigma']);
+buildM('a', $('aNums'), ['d', 'w', 'rw', 'rb', 'sigma']);
+function pushField(k) { ['m', 'a'].forEach(function (pre) { var r = $(pre + '_' + k + '_r'), n = $(pre + '_' + k + '_n'); if (r) r.value = Mst[k]; if (n) n.value = Mst[k]; }); }
+function showErr(msg) { $('mErr').textContent = msg; $('aErr').textContent = msg; }
+function setField(k, v) {
+  var s = MSPEC[k]; if (isNaN(v)) v = Mst[k];
+  v = Math.max(s.min, Math.min(s.max, v));
+  var t = Object.assign({}, Mst); t[k] = v;
+  if (t.rb >= t.rw - 20) {
+    showErr('黒の上の反射値 r_b は、白の上の反射値 r_w より 20 以上小さくしてください（差が小さいと、線の上と床の上の違いが読み取れず、位置の特性が成り立たないため）。受け付けませんでした。');
+    pushField(k); return;
+  }
+  showErr(''); Mst = t; pushField(k); machChanged();
+}
+function setMachine(obj) {
+  Mst = Object.assign({}, C.DEFM, obj);
+  Object.keys(MSPEC).forEach(pushField);
+  $('m_delay').value = Mst.delay; showErr(''); machChanged();
+}
+function readMachine() { return Object.assign({}, Mst); }
+$('m_delay').onchange = function () { Mst = Object.assign({}, Mst, { delay: this.value }); machChanged(); };
+$('m_height').onchange = function () { if (this.value !== 'custom') setField('sigma', HSIGMA[this.value]); };
+function resetMachine() { setMachine(C.DEFM); }
+$('btnMReset').onclick = resetMachine; $('btnAReset').onclick = resetMachine;
+var machTimer = 0;
+function machNotice(msg) {
+  var el = $('machNote'); el.textContent = msg; el.classList.remove('hide');
+  clearTimeout(machTimer); machTimer = setTimeout(function () { el.classList.add('hide'); }, 5000);
+}
+function machChanged() {
+  var std = C.isStdMach(Mst), mp = C.machParams(Mst);
+  P0 = mp.p; Q0 = L.Params2({ d: mp.d });
+  $('machBanner').classList.toggle('hide', std); $('machBannerA').classList.toggle('hide', std);
+  var hs = 'custom', kk; for (kk in HSIGMA) if (HSIGMA[kk] === Mst.sigma) hs = kk;
+  $('m_height').value = hs;
+  var mt = L.metrics(P0, Q0);
+  $('mInfo').innerHTML = '位置の特性：中央付近の傾き <b>' + nf(mt.slope, 2) + ' %/mm</b>、線を見失うずれ <b>±' + nf(mt.lost_mm, 1) + ' mm</b>';
+  $('mKu').textContent = '限界のゲイン K_u・周期 T_u：「限界のゲインを計算する」を押すと表示します（基準の速さは今の設定値を使います）。';
+  drawA(); renderFit();
+}
+$('btnKu').onclick = function () {
+  var el = $('mKu'); el.textContent = '計算中…（数秒かかります）';
+  setTimeout(function () {
+    var mp = C.machParams(Mst), q = L.Params2({ d: mp.d, base: +$('base_n').value }), r = L.find_ku2(mp.p, q);
+    el.innerHTML = (isNaN(r[0]) || isNaN(r[1])) ? '限界のゲイン：この設定では見つかりませんでした（K_P を 400 まで上げても持続する振動にならない。センサの間隔が広すぎて中央付近の傾きが小さい、センサの位置 ell が 0 に近い、などの場合）。' :
+      '限界のゲイン K<sub>u</sub> = <b>' + nf(r[0], 2) + '</b>（(度/秒)/%）、周期 T<sub>u</sub> = <b>' + nf(r[1], 3) + ' s</b>（基準の速さ ' + C.g(q.base) + ' 度/秒）';
+  }, 30);
+};
+
+/* ======================= A: センサと位置 ======================= */
 function syncA(src) { var v = +src.value; if (isNaN(v)) return; v = Math.max(-45, Math.min(45, v)); $('aSl').value = v; if (src !== $('aNum')) $('aNum').value = v; drawA(); }
 $('aSl').oninput = function () { syncA(this); };
 $('aNum').onchange = function () { syncA(this); $('aNum').value = $('aSl').value; };
+function curveAxes(g, w, h, m, xlo, xhi, lo, hi, th, xl, yl) {
+  var X0 = m.l, X1 = w - m.r, Y0 = m.t, Y1 = h - m.b;
+  var xp = function (v) { return X0 + (v - xlo) / (xhi - xlo) * (X1 - X0); }, yp = function (v) { return Y1 - (v - lo) / (hi - lo) * (Y1 - Y0); };
+  g.lineWidth = 1; g.strokeStyle = th.grid;
+  ticks(xlo, xhi, 10).forEach(function (v) { g.beginPath(); g.moveTo(xp(v), Y0); g.lineTo(xp(v), Y1); g.stroke(); text(g, tickLabel(v), xp(v), Y1 + 14, th.muted, 'center'); });
+  ticks(lo, hi, 5).forEach(function (v) { g.beginPath(); g.moveTo(X0, yp(v)); g.lineTo(X1, yp(v)); g.stroke(); text(g, tickLabel(v), X0 - 6, yp(v) + 4, th.muted, 'right'); });
+  g.strokeStyle = th.muted; g.strokeRect(X0 + 0.5, Y0 + 0.5, X1 - X0 - 1, Y1 - Y0 - 1);
+  text(g, yl, 4, 12, th.text); text(g, xl, (X0 + X1) / 2, h - 4, th.text, 'center');
+  return { xp: xp, yp: yp, X0: X0, X1: X1, Y0: Y0, Y1: Y1 };
+}
+function sensorCurve(p, c, xs) { return xs.map(function (x) { return L.refl_band((x - c) / 1000, p); }); }
+function drawSensorGraph(th, ymm) {
+  var c = cv($('aSens')), g = c.g, ax = curveAxes(g, c.w, c.h, { l: 52, r: 12, t: 24, b: 40 }, -50, 50, 0, 100, th, 'センサの横の位置 [mm]（＋ = 左）', '反射値 [%]');
+  var wm = P0.w * 1000;
+  g.fillStyle = 'rgba(120,120,120,0.28)'; g.fillRect(ax.xp(-wm / 2), ax.Y0, ax.xp(wm / 2) - ax.xp(-wm / 2), ax.Y1 - ax.Y0);
+  text(g, '黒い線（幅 ' + nf(wm, 0) + ' mm）', ax.xp(0), ax.Y1 - 6, th.muted, 'center');
+  var xs = [], i; for (i = 0; i <= 400; i++) xs.push(-50 + i * 0.25);
+  var ys = sensorCurve(P0, 0, xs);
+  g.strokeStyle = th.blue; g.lineWidth = 2.2; g.beginPath();
+  xs.forEach(function (x, j) { var X = ax.xp(x), Y = ax.yp(ys[j]); j ? g.lineTo(X, Y) : g.moveTo(X, Y); }); g.stroke();
+  [[ymm + Q0.d * 500, th.violet, '左'], [ymm - Q0.d * 500, th.green, '右']].forEach(function (s, idx) {
+    var v = L.refl_band(s[0] / 1000, P0);
+    g.fillStyle = s[1]; g.strokeStyle = th.panel; g.lineWidth = 2; g.beginPath(); g.arc(ax.xp(Math.max(-50, Math.min(50, s[0]))), ax.yp(v), 6, 0, 6.2832); g.fill(); g.stroke();
+    var tx = ax.xp(Math.max(-50, Math.min(50, s[0]))), al = tx > ax.X1 - 90 ? 'right' : 'left';
+    text(g, s[2] + ' ' + nf(v, 1) + ' %', tx + (al === 'left' ? 10 : -10), ax.yp(v) + (idx ? 16 : -8), s[1], al);
+  });
+}
 function drawA() {
   if ($('paneA').classList.contains('hide')) return;
   var th = theme(), ymm = +$('aSl').value, y = ymm / 1000;
@@ -687,57 +930,146 @@ function drawA() {
   if (Math.abs(ymm) < 0.25) msg = '線の真上：左右の反射値が等しく、位置 = 0。';
   else if (ymm > 0) msg = 'ロボットが線の左（図の上）へずれている：右のセンサのほうが黒に近く、右の反射値が小さい。位置 < 0、偏差 e > 0。';
   else msg = 'ロボットが線の右（図の下）へずれている：左のセンサのほうが黒に近く、左の反射値が小さい。位置 > 0、偏差 e < 0。';
-  if (Math.abs(ymm) > L.lost_limit(P0, Q0) * 1000) msg += ' 両方のセンサがほぼ白の上にあり、位置が 0 に近づいている。';
+  var llim = L.lost_limit(P0, Q0) * 1000;
+  if (Math.abs(ymm) > llim) msg += ' 両方のセンサがほぼ白の上にあり、位置が 0 に近づいている。';
   $('aMsg').textContent = msg;
   /* 上面図（縦横同じ縮尺） */
-  var c = cv($('aTop')), g = c.g, w = c.w, h = c.h, k = h / 170, cy = h / 2, py = function (mm) { return cy - mm * k; };
+  var c = cv($('aTop')), g = c.g, w = c.w, h = c.h, k = h / 190, cy = h / 2, py = function (mm) { return cy - mm * k; };
+  var wm = P0.w * 1000, dmm = Q0.d * 1000, ellmm = P0.ell * 1000;
   g.fillStyle = '#efeee6'; g.fillRect(0, 0, w, h);
-  g.fillStyle = '#1b1b1b'; g.fillRect(0, py(9.5), w, 19 * k);
+  g.fillStyle = '#1b1b1b'; g.fillRect(0, py(wm / 2), w, wm * k);
   g.strokeStyle = '#e8e8e0'; g.lineWidth = 1; g.setLineDash([6, 5]); g.beginPath(); g.moveTo(0, py(0)); g.lineTo(w, py(0)); g.stroke(); g.setLineDash([]);
   var rx = Math.max(150, w * 0.45);                       // センサ列の中心の x
   var pxm = k;                                            // 1 mm = k px（縦横同じ）
+  var wheelX = Math.min(ellmm, (rx - 20) / pxm - 12), bodyL = Math.min(Math.max(ellmm, 30) + 32, (rx - 6) / pxm);
   g.save(); g.translate(rx, py(ymm));
   g.fillStyle = '#d9d9d2'; g.strokeStyle = '#333'; g.lineWidth = 1.2;
-  g.fillRect(-62 * pxm, -(Q0.d / 2 * 1000 + 8) * pxm, 56 * pxm, (Q0.d * 1000 + 16) * pxm);
-  g.strokeRect(-62 * pxm, -(Q0.d / 2 * 1000 + 8) * pxm, 56 * pxm, (Q0.d * 1000 + 16) * pxm);
-  g.fillStyle = th.violet; g.fillRect(-48 * pxm, -(Q0.d / 2 * 1000 + 8 + 5) * pxm, 22 * pxm, 6 * pxm);
-  g.fillStyle = th.green; g.fillRect(-48 * pxm, (Q0.d / 2 * 1000 + 8 - 1) * pxm, 22 * pxm, 6 * pxm);
+  g.fillRect(-bodyL * pxm, -(dmm / 2 + 8) * pxm, (bodyL - 6) * pxm, (dmm + 16) * pxm);
+  g.strokeRect(-bodyL * pxm, -(dmm / 2 + 8) * pxm, (bodyL - 6) * pxm, (dmm + 16) * pxm);
+  g.fillStyle = th.violet; g.fillRect((-wheelX - 11) * pxm, -(dmm / 2 + 8 + 5) * pxm, 22 * pxm, 6 * pxm);
+  g.fillStyle = th.green; g.fillRect((-wheelX - 11) * pxm, (dmm / 2 + 8 - 1) * pxm, 22 * pxm, 6 * pxm);
   [[-1, rl], [1, rr]].forEach(function (s) {
     var v = Math.round(Math.max(0, Math.min(100, s[1])) / 100 * 255);
     g.fillStyle = 'rgb(' + v + ',' + v + ',' + v + ')'; g.strokeStyle = s[0] < 0 ? th.violet : th.green; g.lineWidth = 3.5;
-    g.fillRect(-4 * pxm, s[0] * Q0.d / 2 * 1000 * pxm - 4 * pxm, 8 * pxm, 8 * pxm);
-    g.strokeRect(-4 * pxm, s[0] * Q0.d / 2 * 1000 * pxm - 4 * pxm, 8 * pxm, 8 * pxm);
+    g.fillRect(-4 * pxm, s[0] * dmm / 2 * pxm - 4 * pxm, 8 * pxm, 8 * pxm);
+    g.strokeRect(-4 * pxm, s[0] * dmm / 2 * pxm - 4 * pxm, 8 * pxm, 8 * pxm);
   });
   g.restore();
-  pill(g, '左のセンサ', rx + 16, py(ymm + Q0.d / 2 * 1000) + 4, '#6a4cc0');
-  pill(g, '右のセンサ', rx + 16, py(ymm - Q0.d / 2 * 1000) + 4, '#2f7a12');
+  pill(g, '左のセンサ', rx + 16, py(ymm + dmm / 2) + 4, '#6a4cc0');
+  pill(g, '右のセンサ', rx + 16, py(ymm - dmm / 2) + 4, '#2f7a12');
   text(g, '進む向き（右へ）→', 8, 16, '#333');
   text(g, '左（＋）', w - 8, 16, '#333', 'right'); text(g, '右（−）', w - 8, h - 8, '#333', 'right');
   if (Math.abs(ymm) > 1) {                                // ずれの寸法線
-    var dx = Math.min(rx + 130, w - 100); g.strokeStyle = '#1f5fbf'; g.fillStyle = '#1f5fbf'; g.lineWidth = 1.5;
+    var dx = Math.min(rx + 130, w - 112); g.strokeStyle = '#1f5fbf'; g.fillStyle = '#1f5fbf'; g.lineWidth = 1.5;
     g.beginPath(); g.moveTo(dx, py(0)); g.lineTo(dx, py(ymm)); g.stroke();
     g.beginPath(); g.moveTo(dx - 4, py(0)); g.lineTo(dx + 4, py(0)); g.moveTo(dx - 4, py(ymm)); g.lineTo(dx + 4, py(ymm)); g.stroke();
     pill(g, 'ずれ ' + nf(ymm, 1) + ' mm', dx + 8, py(ymm / 2) + 4, '#1f5fbf');
   }
+  drawSensorGraph(th, ymm);
   /* ずれと位置のグラフ */
-  var gc = cv($('aGraph')), gg = gc.g, gw = gc.w, gh = gc.h, m = { l: 52, r: 12, t: 14, b: 40 };
-  var cur = L.position_curve(P0, Q0, 0.05, 401), ys = cur[0], ps = cur[1];
-  var lo = -75, hi = 75, X0 = m.l, X1 = gw - m.r, Y0 = m.t, Y1 = gh - m.b;
-  var xp = function (mm) { return X0 + (mm + 50) / 100 * (X1 - X0); }, yp = function (v) { return Y1 - (v - lo) / (hi - lo) * (Y1 - Y0); };
-  gg.strokeStyle = th.grid; gg.lineWidth = 1;
-  ticks(-50, 50, 10).forEach(function (v) { gg.beginPath(); gg.moveTo(xp(v), Y0); gg.lineTo(xp(v), Y1); gg.stroke(); text(gg, tickLabel(v), xp(v), Y1 + 14, th.muted, 'center'); });
-  ticks(lo, hi, 6).forEach(function (v) { gg.beginPath(); gg.moveTo(X0, yp(v)); gg.lineTo(X1, yp(v)); gg.stroke(); text(gg, tickLabel(v), X0 - 6, yp(v) + 4, th.muted, 'right'); });
-  gg.strokeStyle = th.text; gg.lineWidth = 0.8; gg.beginPath(); gg.moveTo(X0, yp(0)); gg.lineTo(X1, yp(0)); gg.moveTo(xp(0), Y0); gg.lineTo(xp(0), Y1); gg.stroke();
-  var ll = L.lost_limit(P0, Q0) * 1000;
+  var gc = cv($('aGraph')), gg = gc.g, gw = gc.w, gh = gc.h;
+  var cur = L.position_curve(P0, Q0, 0.05, 401), ys = cur[0], ps = cur[1], pm = 20, i;
+  for (i = 0; i < ps.length; i++) pm = Math.max(pm, Math.abs(ps[i]));
+  var lim = Math.ceil(pm * 1.1 / 10) * 10, ax = curveAxes(gg, gw, gh, { l: 52, r: 12, t: 24, b: 40 }, -50, 50, -lim, lim, th, 'ずれ [mm]（＋ = 左へずれる）', '位置 [%]');
+  var xp = ax.xp, yp = ax.yp;
+  gg.strokeStyle = th.text; gg.lineWidth = 0.8; gg.beginPath(); gg.moveTo(ax.X0, yp(0)); gg.lineTo(ax.X1, yp(0)); gg.moveTo(xp(0), ax.Y0); gg.lineTo(xp(0), ax.Y1); gg.stroke();
   gg.setLineDash([5, 4]); gg.strokeStyle = th.muted; gg.lineWidth = 1;
-  [-ll, ll].forEach(function (v) { gg.beginPath(); gg.moveTo(xp(v), Y0); gg.lineTo(xp(v), Y1); gg.stroke(); }); gg.setLineDash([]);
-  text(gg, '見失う限界 ' + nf(ll, 1) + ' mm', xp(ll) - 6, Y0 + 12, th.muted, 'right');
+  if (llim <= 50) { [-llim, llim].forEach(function (v) { gg.beginPath(); gg.moveTo(xp(v), ax.Y0); gg.lineTo(xp(v), ax.Y1); gg.stroke(); }); }
+  gg.setLineDash([]);
+  if (llim <= 50) text(gg, '見失う限界 ' + nf(llim, 1) + ' mm', xp(llim) - 6, ax.Y0 + 12, th.muted, 'right');
+  else text(gg, '見失う限界 ' + nf(llim, 1) + ' mm（図の外）', ax.X1 - 4, ax.Y0 + 12, th.muted, 'right');
   gg.strokeStyle = th.blue; gg.lineWidth = 2.2; gg.beginPath();
-  for (var i = 0; i < ys.length; i++) { var x = xp(ys[i] * 1000), yy = yp(ps[i]); i ? gg.lineTo(x, yy) : gg.moveTo(x, yy); } gg.stroke();
+  for (i = 0; i < ys.length; i++) { var x = xp(ys[i] * 1000), yy = yp(ps[i]); i ? gg.lineTo(x, yy) : gg.moveTo(x, yy); } gg.stroke();
   gg.fillStyle = th.blue; gg.strokeStyle = th.panel; gg.lineWidth = 2; gg.beginPath(); gg.arc(xp(ymm), yp(pos), 6, 0, 6.2832); gg.fill(); gg.stroke();
-  text(gg, '位置 [%]', 4, 12, th.text);
-  text(gg, 'ずれ [mm]（＋ = 左へずれる）', (X0 + X1) / 2, gh - 4, th.text, 'center');
+  if (fitMode === '3' && fitPts['3'].length) {                 // 測った値（右 − 左）を測定点として重ねる
+    var c0 = fitRes && fitRes.mode3 ? fitRes.c : 0;
+    gg.fillStyle = th.ochre; gg.strokeStyle = th.panel; gg.lineWidth = 1.2;
+    fitPts['3'].forEach(function (q) { var X = q.y - c0, Y = q.r - q.l; if (isFinite(X) && isFinite(Y) && Math.abs(X) <= 50 && Math.abs(Y) <= lim) { gg.beginPath(); gg.arc(xp(X), yp(Y), 3.6, 0, 6.2832); gg.fill(); gg.stroke(); } });
+    text(gg, '黄土色の点 = 測った値（右 − 左）', ax.X1 - 4, ax.Y1 - 6, th.ochre, 'right');
+  }
 }
+
+/* ======================= A: 実機で測った値に合わせる ======================= */
+var fitMode = '3', fitPts = { '1': [], '3': [] }, fitRes = null;
+function curPts() { return fitPts[fitMode]; }
+function setFitMode(m) {
+  fitMode = m; fitRes = null; $('btnFitUse').disabled = true; $('fitRes').innerHTML = '';
+  Array.prototype.forEach.call(document.getElementsByName('fitmode'), function (el) { el.checked = el.value === m; });
+  renderFitTable(); renderFit(); drawA();
+}
+Array.prototype.forEach.call(document.getElementsByName('fitmode'), function (el) { el.onchange = function () { if (this.checked) setFitMode(this.value); }; });
+function renderFitTable() {
+  var m3 = fitMode === '3', tb = $('fitTable').tBodies[0], keys = m3 ? ['y', 'l', 'r'] : ['x', 'y'];
+  $('fitTable').tHead.innerHTML = m3 ? '<tr><th>ロボットのずれ [mm]</th><th>左の反射値 [%]</th><th>右の反射値 [%]</th><th></th></tr>' : '<tr><th>センサの横の位置 [mm]</th><th>反射値 [%]</th><th></th></tr>';
+  $('fitModeNote').textContent = m3 ? 'ロボットのずれ = 線の中心線からセンサ列の中心までの横の距離（左が＋。タブ A の「ずれ」と同じ）。左のセンサは「ずれ + d/2」、右のセンサは「ずれ − d/2」の位置として、機体の設定のセンサの間隔 d（今 ' + Mst.d + ' mm）を使います。' : '位置は、線の中心にセンサの中心が来たときを 0、左（ロボットの進む向きに向かって左）を＋にします。';
+  tb.innerHTML = '';
+  curPts().forEach(function (pt, i) {
+    var tr = document.createElement('tr'), h = '';
+    keys.forEach(function () { h += '<td><input type="number" step="0.1" style="width:6.5em"></td>'; });
+    tr.innerHTML = h + '<td><button class="b" aria-label="この行を消す">×</button></td>';
+    var ins = tr.querySelectorAll('input');
+    keys.forEach(function (k, j) { ins[j].value = pt[k]; ins[j].setAttribute('aria-label', (m3 ? ['ロボットのずれ [mm]', '左の反射値 [%]', '右の反射値 [%]'] : ['位置 [mm]', '反射値 [%]'])[j]); ins[j].onchange = function () { pt[k] = +this.value; fitRes = null; $('btnFitUse').disabled = true; renderFit(); drawA(); }; });
+    tr.querySelector('button').onclick = function () { curPts().splice(i, 1); fitRes = null; renderFitTable(); renderFit(); drawA(); };
+    tb.appendChild(tr);
+  });
+}
+function renderFit() {
+  var box = $('fitBox'); if (!box || $('paneA').classList.contains('hide') || !box.open) return;
+  var th = theme(), c = cv($('fitCv')), g = c.g, ax = curveAxes(g, c.w, c.h, { l: 52, r: 12, t: 24, b: 40 }, -50, 50, 0, 100, th, 'センサの横の位置 [mm]（＋ = 左）', '反射値 [%]');
+  var xs = [], i; for (i = 0; i <= 400; i++) xs.push(-50 + i * 0.25);
+  var cl = function (col, dash, wd, ys) { g.strokeStyle = col; g.lineWidth = wd; g.setLineDash(dash); g.beginPath(); xs.forEach(function (x, j) { var X = ax.xp(x), Y = ax.yp(ys[j]); j ? g.lineTo(X, Y) : g.moveTo(X, Y); }); g.stroke(); g.setLineDash([]); };
+  cl(th.gray, [], 1.6, sensorCurve(P0, 0, xs));
+  if (fitRes) cl(th.teal, [6, 4], 2.4, sensorCurve(L.Params({ r_w: fitRes.rw, r_b: fitRes.rb, sigma: fitRes.sigma / 1000, w: fitRes.w / 1000 }), fitRes.c, xs));
+  var dot = function (x, y, col) { if (isFinite(x) && isFinite(y)) { g.fillStyle = col; g.strokeStyle = th.panel; g.lineWidth = 1.5; g.beginPath(); g.arc(ax.xp(Math.max(-50, Math.min(50, x))), ax.yp(Math.max(0, Math.min(100, y))), 4.5, 0, 6.2832); g.fill(); g.stroke(); } };
+  var d = fitRes && fitRes.d !== undefined ? fitRes.d : Mst.d;
+  if (fitMode === '3') curPts().forEach(function (pt) { dot(pt.y + d / 2, pt.l, th.violet); dot(pt.y - d / 2, pt.r, th.green); });
+  else curPts().forEach(function (pt) { dot(pt.x, pt.y, th.ochre); });
+}
+$('fitBox').addEventListener('toggle', renderFit);
+$('btnFitAdd').onclick = function () { curPts().push(fitMode === '3' ? { y: 0, l: 50, r: 50 } : { x: 0, y: 50 }); fitRes = null; renderFitTable(); renderFit(); };
+$('btnFitClear').onclick = function () { fitPts[fitMode] = []; fitRes = null; $('fitRes').innerHTML = ''; $('btnFitUse').disabled = true; renderFitTable(); renderFit(); drawA(); };
+$('btnFitImport').onclick = function () {
+  var add = { '1': [], '3': [] }, first = null;
+  $('fitPaste').value.split(/\r?\n/).forEach(function (ln) {
+    var t = ln.trim(); if (!t) return;
+    var a = t.split(/[\t,; ]+/).map(Number);
+    if (a.length === 3 && a.every(isFinite)) { first = first || '3'; add['3'].push({ y: a[0], l: a[1], r: a[2] }); }
+    else if (a.length === 2 && a.every(isFinite)) { first = first || '1'; add['1'].push({ x: a[0], y: a[1] }); }
+  });
+  if (!first) { $('fitErr').textContent = '読み取れる行がありません（「ずれ 左 右」の 3 つ、または「位置 反射値」の 2 つの数字を 1 行に）。'; return; }
+  var use = add['3'].length >= add['1'].length ? '3' : '1';
+  $('fitErr').textContent = add['3'].length && add['1'].length ? '2 列の行と 3 列の行が混ざっていたので、多いほう（' + (use === '3' ? '3 列' : '2 列') + '）だけ取り込みました。' : '';
+  fitPts[use] = fitPts[use].concat(add[use]); $('fitPaste').value = '';
+  setFitMode(use);
+};
+$('btnFit').onclick = function () {
+  var ok = function (v) { return isFinite(v); }, m3 = fitMode === '3';
+  var pts = curPts().filter(function (p) { return m3 ? ok(p.y) && ok(p.l) && ok(p.r) : ok(p.x) && ok(p.y); });
+  // at least 12 points spread over both white sides (6 points 12 mm apart gave r_b 41.8 instead of 10 in test/check_fit.cjs)
+  // 点は 12 個以上、線の両側の白まで（6 個・12 mm おきでは r_b が 10 でなく 41.8 になった）
+  if (pts.length < 12) { $('fitErr').textContent = '測定点（行）が ' + pts.length + ' 個です。12 個以上入れてください（2〜3 mm おきに、線の両側の白まで）。'; return; }
+  var xs = pts.map(function (p) { return m3 ? p.y : p.x; }), lo = Math.min.apply(null, xs), hi = Math.max.apply(null, xs), half = Mst.w / 2;   // Mst is in mm / Mst は mm
+  if (!(lo < -(half + 10) && hi > half + 10)) { $('fitErr').textContent = '測った範囲が ' + nf(lo, 0) + '〜' + nf(hi, 0) + ' mm です。線の両側の白まで（中心から ±' + nf(half + 10, 0) + ' mm より外まで）測ってください。'; return; }
+  $('fitErr').textContent = '';
+  fitRes = m3 ? C.fitReflect3(pts, Mst.d) : C.fitReflect(pts.map(function (p) { return { x: p.x, y: p.y }; }));
+  fitRes.mode3 = m3;
+  renderFit();
+  var h = '合わせた値：r<sub>w</sub> = <b>' + nf(fitRes.rw, 1) + ' %</b>、r<sub>b</sub> = <b>' + nf(fitRes.rb, 1) + ' %</b>、にじみ σ = <b>' + nf(fitRes.sigma, 1) + ' mm</b>、線の幅 w = <b>' + nf(fitRes.w, 1) + ' mm</b>、原点のずれ c = <b>' + nf(fitRes.c, 2) + ' mm</b>。合わせたあとの誤差（平均の差）= <b>' + nf(fitRes.mae, 2) + ' %</b>。';
+  if (m3) {
+    h += '<br>左のセンサだけ：r<sub>w</sub> ' + nf(fitRes.left.rw, 1) + ' %・r<sub>b</sub> ' + nf(fitRes.left.rb, 1) + ' %　／　右のセンサだけ：r<sub>w</sub> ' + nf(fitRes.right.rw, 1) + ' %・r<sub>b</sub> ' + nf(fitRes.right.rb, 1) + ' %（形は上の合わせた値を共通に使って求めた）。';
+    if (fitRes.mismatch) h += '<br><span class="err">左右のセンサの出方がそろっていません。線の中央でも位置が 0 になりません（取り付けの高さ・向きを確かめましょう）。</span>';
+    h += '<br>計算モデルは左右のセンサを同じ特性として走らせます。';
+  }
+  $('fitRes').innerHTML = h; $('btnFitUse').disabled = false; drawA();
+};
+$('btnFitUse').onclick = function () {
+  if (!fitRes) return;
+  var cl = function (k, v) { return Math.max(MSPEC[k].min, Math.min(MSPEC[k].max, Math.round(v * 2) / 2)); };
+  var t = { rw: cl('rw', fitRes.rw), rb: cl('rb', fitRes.rb), sigma: cl('sigma', fitRes.sigma), w: cl('w', fitRes.w) };
+  if (t.rb >= t.rw - 20) { showErr('合わせた値では r_b と r_w の差が 20 未満のため、機体の設定には入れられませんでした。'); return; }
+  setMachine(Object.assign({}, Mst, t));
+};
+renderFitTable();
 
 /* ======================= B: 設定欄の生成 ======================= */
 var SPEC = {
@@ -768,6 +1100,7 @@ function readSettings() {
   var c = {};
   Object.keys(SPEC).forEach(function (k) { c[k] = +$(k + '_n').value; });
   c.mode = getMode(); c.course = $('course').value; c.ctrl_dt = +$('ctrl_dt').value; c.imax = $('imax').value; c.band = +$('band').value;
+  c.mach = readMachine();
   return c;
 }
 function setSettings(c) {
@@ -775,6 +1108,7 @@ function setSettings(c) {
   document.querySelector('input[name=mode][value=' + c.mode + ']').checked = true; syncMode();
   $('course').value = c.course; $('course').onchange();
   $('ctrl_dt').value = String(c.ctrl_dt); $('imax').value = c.imax; $('band').value = String(c.band === undefined ? 1 : c.band);
+  if (c.mach) setMachine(c.mach);
 }
 setSettings(C.DEF);
 
@@ -807,14 +1141,21 @@ function tick(ts) {
 $('btnRun').onclick = function () { doRun(true); };
 $('btnNow').onclick = function () { doRun(false); };
 $('btnClear').onclick = function () { stopAnim(); results = []; drawAll(); renderCards(); };
-$('preset').onchange = function () {
+function applyPreset(i) {
   stopAnim();
-  if (this.value === '') return;
-  var conds = C.expand(PRESETS[+this.value]);
+  var wasMach = !C.isStdMach(Mst);
+  var conds = C.expand(PRESETS[i]);
   results = conds.map(C.run);
   $('keep').checked = true;
   setSettings(conds[conds.length - 1]);
+  if (wasMach) machNotice('お試しの組は標準の機体で計算します（機体の設定を標準に戻しました）');
   drawAll(); renderCards();
+}
+$('preset').onchange = function () {
+  stopAnim();
+  if (this.value === '') return;
+  applyPreset(+this.value);
+  try { history.replaceState(null, '', '#preset=' + (+this.value + 1)); } catch (e) {}   // 履歴を増やさずアドレスを書き換える
 };
 $('brk').onchange = function () { drawAll(); };
 $('detSpeed').addEventListener('toggle', function () { drawAll(); });
@@ -840,7 +1181,8 @@ function drawTop(t) {
     g.strokeStyle = '#b58b2a'; g.lineWidth = 1; g.setLineDash([4, 3]); g.beginPath(); g.moveTo(px(x1c), Y0); g.lineTo(px(x1c), Y1); g.stroke(); g.setLineDash([]);
     text(g, 'ここからカーブ（左へ曲がる）', Math.min(px(x1c) + 6, X1 - 190), Y0 + 14, '#7a5a10');
   }
-  g.fillStyle = '#1b1b1b'; g.fillRect(X0, py(9.5), X1 - X0, 19 * ky);
+  var mc = cur().cond.mach || C.DEFM;
+  g.fillStyle = '#1b1b1b'; g.fillRect(X0, py(mc.w / 2), X1 - X0, mc.w * ky);
   g.strokeStyle = '#e8e8e0'; g.lineWidth = 1; g.setLineDash([6, 5]); g.beginPath(); g.moveTo(X0, py(0)); g.lineTo(X1, py(0)); g.stroke(); g.setLineDash([]);
   /* 軸 */
   g.lineWidth = 1;
@@ -864,11 +1206,11 @@ function drawTop(t) {
   var a = cr.res, j = idxCur, cond = cr.cond;
   var dxy = ky * 1000 / kx;                             // 縦横の縮尺の比（向きの見かけの誇張）
   var ang = Math.atan(Math.tan(a.psi[j]) * dxy); ang = Math.max(-1.2, Math.min(1.2, ang));
-  var ds = 0.016 * 1000 * ky;
+  var ds = mc.d / 2 * ky, wx = 14 + mc.ell * 0.6;
   g.save(); g.translate(px(a.s[j]), py(a.y_s[j] * 1000)); g.rotate(-ang);
   g.fillStyle = '#d9d9d2'; g.strokeStyle = '#2b2b2b'; g.lineWidth = 1.3;
-  g.fillRect(-52, -ds - 9, 48, 2 * ds + 18); g.strokeRect(-52, -ds - 9, 48, 2 * ds + 18);
-  g.fillStyle = th.violet; g.fillRect(-40, -ds - 9 - 7, 24, 8); g.fillStyle = th.green; g.fillRect(-40, ds + 9 - 1, 24, 8);
+  g.fillRect(-(wx + 22), -ds - 9, wx + 18, 2 * ds + 18); g.strokeRect(-(wx + 22), -ds - 9, wx + 18, 2 * ds + 18);
+  g.fillStyle = th.violet; g.fillRect(-(wx + 12), -ds - 9 - 7, 24, 8); g.fillStyle = th.green; g.fillRect(-(wx + 12), ds + 9 - 1, 24, 8);
   [[-1, a.rl[j]], [1, a.rr[j]]].forEach(function (s) {
     var v = Math.round(Math.max(0, Math.min(100, s[1])) / 100 * 255);
     g.fillStyle = 'rgb(' + v + ',' + v + ',' + v + ')'; g.strokeStyle = s[0] < 0 ? th.violet : th.green; g.lineWidth = 3.5;
@@ -1010,7 +1352,7 @@ function renderCards() {
 
 /* ======================= B: 記録の表 ======================= */
 var HEAD = ['方式', 'K_P', 'K_I', 'K_D', '基準の速さ [度/秒]', 'コース', '最初のずれ [mm]', '行き過ぎ量または最大のずれ [mm]', '収まったとみなす幅 [mm]', '収まる時刻',
-  '最後の 1 秒のずれの平均 [mm]', '振動', 'mv が上限に当たっていた時間 [%]', '線の見失い', 'メモ'];
+  '最後の 1 秒のずれの平均 [mm]', '振動', 'mv が上限に当たっていた時間 [%]', '線の見失い', '機体', 'メモ'];
 var recs = [];
 function recCells(r) {
   var c = r.cond, m = r.m, onoff = c.mode === 'onoff';
@@ -1021,7 +1363,7 @@ function recCells(r) {
   return [kind, onoff ? '—' : C.g(c.kp), onoff ? '—' : C.g(c.ki), onoff ? '—' : C.g(c.kd), C.g(c.base),
     c.course === 'curve' ? 'カーブ R=' + C.g(c.R) + ' m' : '直線', C.g(c.y0), (c.y0 === 0 ? '最大 ' : '') + nf(C.devValue(m, c), 2),
     '±' + C.g(m.band), C.fmtSettle(m), m.osc.sustained ? '—（振動中）' : nf(m.steady, 2),
-    C.fmtOsc(m), nf(m.sat * 100, 0), m.lost ? '見失った' : 'なし'];
+    C.fmtOsc(m), nf(m.sat * 100, 0), m.lost ? '見失った' : 'なし', C.machText(c.mach || C.DEFM)];
 }
 function renderRec() {
   $('recTable').tBodies[0].innerHTML = '';
@@ -1052,7 +1394,21 @@ $('btnCopy').onclick = function () {
 };
 
 window.__sim = { get results() { return results; }, get recs() { return recs; }, drawAll: drawAll, showTab: showTab, setSettings: setSettings, readSettings: readSettings, setAnimT: function (t) { stopAnim(); anim = { t: t, last: 0, raf: 0 }; drawAll(); }, endAnim: function () { anim = null; drawAll(); } };
-renderRec(); renderCards(); drawA();
+/* URL の # 以降で開き方を指定: #preset=N（1〜14）／#tab=A&offset=ずれ[mm] */
+function applyHash() {
+  var h = (location.hash || '').replace(/^#/, ''), q = {};
+  h.split('&').forEach(function (kv) { var a = kv.split('='); if (a[0]) q[a[0]] = a.length > 1 ? a[1] : ''; });
+  if (/^\d+$/.test(q.preset || '')) {
+    var n = +q.preset;
+    if (n >= 1 && n <= PRESETS.length) { showTab('B'); $('preset').value = String(n - 1); applyPreset(n - 1); return; }
+  }
+  if (q.tab === 'A') {
+    if (/^-?\d+(\.\d+)?$/.test(q.offset || '')) { var v = +q.offset; if (v >= -45 && v <= 45) { $('aSl').value = v; $('aNum').value = v; } }
+    showTab('A');
+  }
+}
+window.addEventListener('hashchange', applyHash);
+renderRec(); renderCards(); drawA(); applyHash();
 })();
 </script>
 </body>
